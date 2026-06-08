@@ -1,15 +1,17 @@
-import { GraduationCap } from 'lucide-react'
-import { cn } from '@/lib/utils'
-
+import { GraduationCap } from "lucide-react";
+import { cn } from "@/lib/utils";
+import logo from "@/assets/logo-dark.svg";
+import Image from "next/image";
 export function Logo({ collapsed = false }: { collapsed?: boolean }) {
   return (
-    <div className={cn('flex items-center gap-2', collapsed && 'justify-center')}>
-      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-        <GraduationCap className="h-5 w-5 text-primary-foreground" />
-      </div>
+    <div
+      className={cn("flex py-4 items-center gap-2", collapsed && "justify-center")}
+    >
       {!collapsed && (
-        <span className="font-bold text-lg tracking-tight">AttendIQ</span>
+          <Image src="/logo-dark.svg" alt="Logo" width={200} height={200} />
       )}
+
+
     </div>
-  )
+  );
 }
