@@ -59,7 +59,7 @@ function StartDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm"><Plus className="h-4 w-4 mr-1.5" /> Start Session</Button>
+        <Button size="sm"><Plus className=" h-4 w-4 mr-1.5" /> Start Session</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Start Attendance Session</DialogTitle></DialogHeader>
@@ -77,12 +77,12 @@ function StartDialog() {
               </SelectContent>
             </Select>
           </div>
-          <p className="flex items-center gap-1.5 text-xs italic text-muted-foreground">
-            <MapPin className="h-3.5 w-3.5 shrink-0" />
-            GPS will be captured. Students within{' '}
-            <span className="font-medium not-italic">{config.gpsGeofenceMeters} m</span>{' '}
-            will be marked present.
-          </p>
+          <div className="flex text-primary items-center gap-1.5 text-[.85rem] bg-accent/20 p-2 rounded-lg italic -text-muted-foreground">
+            <MapPin size={30} className=" shrink-0" />
+            <p className="">GPS will be captured. Students within{' '}
+            <span className="font-bold not-italic">{config.gpsGeofenceMeters}m</span>{' '}
+            will be marked present.</p>
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>

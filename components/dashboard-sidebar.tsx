@@ -76,7 +76,7 @@ export function DashboardSidebar() {
               href={item.href}
               title={collapsed ? item.label : undefined}
               className={cn(
-                'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors',
+                'flex items-center gap-2.5 rounded-lg p-3 text-sm transition-colors',
                 active
                   ? 'bg-primary text-primary-foreground font-medium'
                   : 'text-muted-foreground hover:text-foreground hover:bg-muted',

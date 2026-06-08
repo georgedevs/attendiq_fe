@@ -12,7 +12,16 @@ interface StatCardProps {
 
 export function StatCard({ label, value, sub, loading, className }: StatCardProps) {
   return (
-    <div className={cn('rounded-xl border border-border bg-card p-5 space-y-1.5', className)}>
+    <div
+      className={cn(
+        'rounded-xl p-5 space-y-1.5',
+  // Light mode (default): gradient white card
+  'bg-linear-to-br from-[#9c9c9c14] to-transparent border border-white shadow-2xl shadow-[green]/10',
+        // Dark mode: keep the existing design tokens (unchanged appearance)
+        'dark:bg-card dark:border-border dark:shadow-none',
+        className
+      )}
+    >
       {/* Label — uppercase tracking, muted, small */}
       <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
         {label}
