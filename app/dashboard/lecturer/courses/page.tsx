@@ -90,7 +90,7 @@ function CourseCard({ course }: { course: Course }) {
   }
   return (
     <>
-    <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-3 hover:border-primary/30 transition-colors">
+    <div className="rounded-xl shadow-2xl border  shadow-[green]/15 -bg-card p-5 flex flex-col gap-3 hover:border-primary/30 transition-colors">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-sm font-semibold">{course.code}</p>
@@ -187,7 +187,7 @@ export default function LecturerCoursesPage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Courses</h1>
+          <h1 className="ttl text-2xl font-bold tracking-tight">Courses</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {total !== undefined
               ? <><span className="font-medium">{total}</span>{' '}<span className="italic">course{total !== 1 ? 's' : ''} in your teaching schedule</span></>

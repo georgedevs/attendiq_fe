@@ -45,7 +45,7 @@ export default function LecturerDashboard() {
       <div className="flex items-start justify-between gap-4">
         {meLoading ? <PageHeaderSkeleton /> : (
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">{name}</h1>
+            <h1 className="ttl text-2xl font-bold tracking-tight"><span className="text-[#9c9c9c]/70"> Welcome back! {" "}</span> {name}</h1>
             <p className="text-sm text-muted-foreground mt-1">
               {profile?.department
                 ? <><span className="font-medium">{profile.department}</span>{' '}<span className="italic">· Caleb University</span></>
@@ -56,7 +56,7 @@ export default function LecturerDashboard() {
         )}
         <Button asChild size="sm" className="shrink-0">
           <Link href="/dashboard/lecturer/sessions">
-            <Plus className="h-4 w-4 mr-1.5" /> New Session
+            <Plus className="h-4 w-4" /> New Session
           </Link>
         </Button>
       </div>
@@ -65,7 +65,7 @@ export default function LecturerDashboard() {
       {coursesLoading || activeLoading
         ? <StatCardsSkeleton count={4} />
         : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
             <StatCard label="Courses"         value={coursesData?.data?.pagination.total ?? '—'} sub="teaching" />
             <StatCard label="Active"          value={active.length} sub="right now" />
             <StatCard label="Total Sessions"  value={recentData?.data?.pagination.total ?? '—'} sub="all time" />

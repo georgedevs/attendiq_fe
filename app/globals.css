@@ -236,3 +236,8 @@ html {
 :root {
   color-scheme: light dark;
 }
+
+
+.ttl {
+letter-spacing: -1.5px !important;
+}
