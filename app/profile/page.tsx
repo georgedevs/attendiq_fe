@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Loader2, Save } from 'lucide-react'
+import { Loader2, Save, LogOut } from 'lucide-react'
 import { useMe } from '@/hooks/use-me'
 import { useApiMutation, useInvalidate } from '@/hooks/use-api'
 import { ProtectedRoute } from '@/components/protected-route'
@@ -13,6 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
+import { logout } from '@/lib/auth'
 import type { ApiSuccess, MeResponse } from '@/lib/types'
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -27,6 +29,12 @@ function ProfileForm() {
   const { data, isLoading } = useMe()
   const me = data?.data
   const invalidate = useInvalidate()
+  const router = useRouter()
+
+  const handleLogout = async () => {
+    await logout()
+    router.push('/login')
+  }
 
   const [fullName, setFullName]     = useState('')
   const [level, setLevel]           = useState('')
@@ -97,6 +105,18 @@ function ProfileForm() {
             </div>
           )}
         </div>
+      </section>
+
+      {/* Sign out — visible on mobile where sidebar is hidden */}
+      <section className="lg:hidden">
+        <Button
+          variant="destructive"
+          className="w-full"
+          onClick={handleLogout}
+        >
+          <LogOut className="h-4 w-4 mr-2" />
+          Sign out
+        </Button>
       </section>
 
       {/* Editable profile fields */}
