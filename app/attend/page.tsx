@@ -189,62 +189,72 @@ function AttendPage() {
         {/* GPS waiting — live accuracy feed */}
         {step === 'gps-waiting' && (
           <div className="rounded-xl border border-border bg-card p-7 space-y-5">
-            <div className="flex items-start gap-3">
-              <Navigation className={`h-5 w-5 shrink-0 mt-0.5 ${gps && !gpsError ? 'text-primary' : 'text-muted-foreground'}`} />
-              <div>
-                <p className="font-semibold">Getting your location</p>
-                <p className="text-xs italic text-muted-foreground mt-0.5">
-                  {gpsError
-                    ? 'Location unavailable — you can still submit without it.'
-                    : 'Hold still for a moment for the best accuracy.'}
-                </p>
-              </div>
-            </div>
-
-            {/* Live accuracy display */}
-            {!gpsError && (
-              <div className="rounded-lg bg-muted/40 px-4 py-3 space-y-1">
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">GPS accuracy</p>
-                <p className="text-sm">
-                  <AccuracyLabel accuracy={gps?.accuracy ?? null} />
-                </p>
-                {!gps && (
-                  <div className="flex gap-1 pt-1">
-                    {[1,2,3].map(i => (
-                      <div key={i} className="h-1 flex-1 rounded-full skeleton-shimmer" />
-                    ))}
+            {gpsError ? (
+              /* ── Location blocked / unavailable ── */
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <Navigation className="h-5 w-5 shrink-0 mt-0.5 text-destructive" />
+                  <div>
+                    <p className="font-semibold">Location access required</p>
+                    <p className="text-xs italic text-muted-foreground mt-0.5">
+                      AttendIQ needs your location to verify you are in the classroom.
+                    </p>
                   </div>
+                </div>
+
+                <div className="rounded-lg bg-muted/40 px-4 py-3 space-y-2 text-sm text-muted-foreground">
+                  <p className="font-medium text-foreground">How to enable location:</p>
+                  <p><span className="font-medium">Android:</span> tap the lock icon in your browser address bar → Permissions → Location → Allow</p>
+                  <p><span className="font-medium">iPhone:</span> Settings → Safari (or Chrome) → Location → Allow</p>
+                </div>
+
+                <Button className="w-full" onClick={() => window.location.reload()}>
+                  I've enabled location — try again
+                </Button>
+              </div>
+            ) : (
+              /* ── GPS locking in ── */
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <Navigation className={`h-5 w-5 shrink-0 mt-0.5 ${gps ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <div>
+                    <p className="font-semibold">Getting your location</p>
+                    <p className="text-xs italic text-muted-foreground mt-0.5">
+                      Hold still for a moment for the best accuracy.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-lg bg-muted/40 px-4 py-3 space-y-1">
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">GPS accuracy</p>
+                  <p className="text-sm">
+                    <AccuracyLabel accuracy={gps?.accuracy ?? null} />
+                  </p>
+                  {!gps && (
+                    <div className="flex gap-1 pt-1">
+                      {[1,2,3].map(i => (
+                        <div key={i} className="h-1 flex-1 rounded-full skeleton-shimmer" />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {gps && (
+                  <Button
+                    className="w-full"
+                    onClick={() => { stopWatch(); submitAttendance(gps) }}
+                  >
+                    <MapPin className="h-4 w-4 mr-1.5" />
+                    Use this location ({Math.round(gps.accuracy)} m)
+                  </Button>
+                )}
+
+                {gpsSeconds >= GPS_HINT_AFTER && !gps && (
+                  <p className="text-xs italic text-muted-foreground text-center">
+                    GPS is taking a while — try moving near a window or stepping outside briefly.
+                  </p>
                 )}
               </div>
-            )}
-
-            <div className="flex flex-col gap-2">
-              {/* Submit with current GPS (enabled once we have any fix) */}
-              {!gpsError && gps && (
-                <Button
-                  className="w-full"
-                  onClick={() => { stopWatch(); submitAttendance(gps) }}
-                >
-                  <MapPin className="h-4 w-4 mr-1.5" />
-                  Use this location ({Math.round(gps.accuracy)} m)
-                </Button>
-              )}
-
-              {/* Skip / submit without GPS */}
-              <Button
-                variant={gpsError ? 'default' : 'outline'}
-                className="w-full"
-                onClick={() => { stopWatch(); submitAttendance() }}
-              >
-                {gpsError ? 'Submit without location' : 'Skip location'}
-              </Button>
-            </div>
-
-            {/* Hint after a few seconds */}
-            {gpsSeconds >= GPS_HINT_AFTER && !gpsError && !gps && (
-              <p className="text-xs italic text-muted-foreground text-center">
-                GPS is taking a while — try moving near a window or stepping outside briefly.
-              </p>
             )}
           </div>
         )}
