@@ -250,3 +250,10 @@ html {
   background-image: url("/grid.svg");
   background-repeat: repeat;
 }
+
+
+.heroImg{
+  background-image: url("/hero.jpg");
+  background-color: rgb(79, 106, 67);
+  
+}
