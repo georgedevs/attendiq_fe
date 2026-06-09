@@ -1,16 +1,39 @@
-import { GraduationCap } from "lucide-react";
-import { cn } from "@/lib/utils";
-import Image from "next/image";
-export function Logo({ collapsed = false }: { collapsed?: boolean }) {
+'use client'
+
+import Image from 'next/image'
+import { useTheme } from 'next-themes'
+import { useEffect, useState } from 'react'
+import { cn } from '@/lib/utils'
+
+interface LogoProps {
+  collapsed?: boolean
+  className?: string
+  height?: number
+}
+
+export function Logo({ collapsed = false, className, height = 32 }: LogoProps) {
+  const { resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => setMounted(true), [])
+
+  if (collapsed) return null
+
+  // Avoid hydration mismatch — render nothing until mounted
+  if (!mounted) return <div style={{ height }} />
+
+  // logo-dark.svg = dark text (use on light backgrounds)
+  // logo-light.svg = white text (use on dark backgrounds)
+  const src = resolvedTheme === 'dark' ? '/logo-light.svg' : '/logo-dark.svg'
+
   return (
-    <div
-      className={cn("flex py-4 items-center gap-2", collapsed && "justify-center")}
-    >
-      {!collapsed && (
-          <Image src="/logo.svg" alt="Logo" className="w-[160px] md:w-[200px]" width={180} height={180} />
-      )}
-
-
-    </div>
-  );
+    <Image
+      src={src}
+      alt="AttendIQ"
+      width={140}
+      height={height}
+      className={cn('object-contain', className)}
+      priority
+    />
+  )
 }

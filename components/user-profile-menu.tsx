@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { cn } from '@/lib/utils'
+import { cn, toTitleCase } from '@/lib/utils'
 
 function getInitials(name: string): string {
   return name
@@ -28,8 +28,9 @@ export function UserProfileMenu({ isCollapsed }: { isCollapsed?: boolean }) {
   const router = useRouter()
   const { data } = useMe()
   const me = data?.data
-  const name =
+  const name = toTitleCase(
     (me?.profile as { fullName?: string } | null)?.fullName || me?.user.email || '...'
+  )
 
   const handleLogout = async () => {
     await logout()

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { Logo } from '@/components/logo'
 import type { ApiSuccess } from '@/lib/types'
 
 interface LoginResult { accessToken: string; refreshToken: string }
@@ -58,8 +59,8 @@ function LoginForm() {
     <div className="min-h-screen bg-background flex flex-col overflow-x-hidden">
 
       {/* Top bar */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
-        <span className="text-sm font-semibold tracking-tight">AttendIQ</span>
+      <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
+        <Logo height={28} />
         <ThemeToggle />
       </div>
 
@@ -132,9 +133,6 @@ function LoginForm() {
             </form>
           </div>
 
-          <p className="text-xs text-muted-foreground text-center">
-            Caleb University Lagos
-          </p>
         </div>
       </div>
     </div>

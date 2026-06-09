@@ -4,7 +4,7 @@ import { useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { Plus, Loader2, MapPin, ChevronRight } from 'lucide-react'
+import { Plus, Loader2, MapPin, ChevronRight, Download } from 'lucide-react'
 import { useSessions, useStartSession } from '@/hooks/use-sessions'
 import { useCourses } from '@/hooks/use-courses'
 import { useMe } from '@/hooks/use-me'
@@ -17,8 +17,10 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { formatDateTime } from '@/lib/utils'
-import type { Session } from '@/lib/types'
+import { formatDateTime, toTitleCase } from '@/lib/utils'
+import { api } from '@/lib/api-client'
+import type { Session, ApiSuccess } from '@/lib/types'
+import type { AttendanceRow } from '@/hooks/use-session-attendance'
 
 function StatusDot({ status }: { status: string }) {
   const c = status === 'active' ? 'bg-green-500' : status === 'paused' ? 'bg-yellow-500' : 'bg-border'
@@ -38,15 +40,37 @@ function StartDialog() {
 
   const handle = async () => {
     if (!courseId) { toast.error('Select a course'); return }
+    if (!navigator.geolocation) { toast.error('Your browser does not support location — use a phone browser'); return }
+
+    // Check permission state before requesting to show the right error
+    if (navigator.permissions) {
+      const perm = await navigator.permissions.query({ name: 'geolocation' })
+      if (perm.state === 'denied') {
+        toast.error('Location blocked. Enable it in your browser settings then try again.')
+        return
+      }
+    }
+
     setLoading(true)
     let gps: { lecturerLatitude: number; lecturerLongitude: number; lecturerLocationAccuracy: number } | undefined
-    await new Promise<void>((resolve) => {
-      if (!navigator.geolocation) { resolve(); return }
-      navigator.geolocation.getCurrentPosition(
-        (p) => { gps = { lecturerLatitude: p.coords.latitude, lecturerLongitude: p.coords.longitude, lecturerLocationAccuracy: p.coords.accuracy }; resolve() },
-        () => resolve(), { timeout: 5000 }
-      )
-    })
+
+    try {
+      gps = await new Promise<typeof gps>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          (p) => resolve({ lecturerLatitude: p.coords.latitude, lecturerLongitude: p.coords.longitude, lecturerLocationAccuracy: p.coords.accuracy }),
+          (err) => {
+            if (err.code === err.PERMISSION_DENIED) reject(new Error('Location permission denied. Allow location and try again.'))
+            else reject(new Error('Could not get your location. Try again.'))
+          },
+          { timeout: 10000, enableHighAccuracy: true }
+        )
+      })
+    } catch (err: unknown) {
+      toast.error((err as Error).message)
+      setLoading(false)
+      return
+    }
+
     try {
       const res = await start.mutateAsync({ courseId, ...gps })
       toast.success('Session started'); setOpen(false)
@@ -137,6 +161,70 @@ function SessionsPageInner() {
     ? all.find(s => s.course)?.course as { code: string; title: string } | undefined
     : undefined
 
+  const [reportLoading, setReportLoading] = useState(false)
+
+  const downloadReport = async () => {
+    if (!courseIdFilter || !all.length) return
+    setReportLoading(true)
+    try {
+      // Fetch attendance for every session in parallel
+      const results = await Promise.all(
+        all.map(s =>
+          api.get<ApiSuccess<{ records: AttendanceRow[] }>>(`/attend/session/${s.id}`)
+            .then(r => ({ session: s, records: r.data.records }))
+            .catch(() => ({ session: s, records: [] }))
+        )
+      )
+
+      // Build student map: studentId → { name, matric, sessions: { [sessionId]: status } }
+      const studentMap = new Map<string, { name: string; matric: string | null; sessions: Record<string, string> }>()
+      for (const { session, records } of results) {
+        for (const rec of records) {
+          if (!studentMap.has(rec.studentId)) {
+            studentMap.set(rec.studentId, { name: rec.studentName, matric: rec.matricNumber, sessions: {} })
+          }
+          studentMap.get(rec.studentId)!.sessions[session.id] = rec.status
+        }
+      }
+
+      const sessions = all.slice().reverse() // chronological order
+      const dateLabels = sessions.map(s => formatDateTime(s.startedAt))
+
+      // CSV header
+      const header = ['Student Name', 'Matric Number', ...dateLabels, 'Total Present', `Total Sessions (${sessions.length})`, 'Attendance %']
+
+      // CSV rows
+      const rows = Array.from(studentMap.values())
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map(student => {
+          const statuses = sessions.map(s => {
+            const st = student.sessions[s.id]
+            if (!st) return 'Absent'
+            if (st === 'present') return 'Present'
+            if (st === 'flagged') return 'Flagged'
+            if (st === 'rejected') return 'Rejected'
+            return st
+          })
+          const present = statuses.filter(s => s === 'Present' || s === 'Flagged').length
+          const pct = sessions.length ? `${Math.round((present / sessions.length) * 100)}%` : '0%'
+          return [toTitleCase(student.name), student.matric ?? '', ...statuses, present, sessions.length, pct]
+        })
+
+      const csv = [header, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n')
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${filteredCourse?.code ?? 'course'}-attendance-report.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      toast.error('Failed to generate report')
+    } finally {
+      setReportLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
 
@@ -155,9 +243,22 @@ function SessionsPageInner() {
         </div>
         <div className="flex items-center gap-2">
           {courseIdFilter && (
-            <Button variant="ghost" size="sm" asChild className="text-xs text-muted-foreground">
-              <Link href="/dashboard/lecturer/sessions">All courses</Link>
-            </Button>
+            <>
+              <Button variant="ghost" size="sm" asChild className="text-xs text-muted-foreground">
+                <Link href="/dashboard/lecturer/sessions">All courses</Link>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={downloadReport}
+                disabled={reportLoading || allLoading || !all.length}
+              >
+                {reportLoading
+                  ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                  : <Download className="h-4 w-4 mr-1.5" />}
+                Download Report
+              </Button>
+            </>
           )}
           <StartDialog />
         </div>

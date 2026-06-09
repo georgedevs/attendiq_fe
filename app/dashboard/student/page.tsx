@@ -7,7 +7,7 @@ import { StatCard } from '@/components/stat-card'
 import { StatCardsSkeleton, AttendanceListSkeleton, PageHeaderSkeleton } from '@/components/skeletons'
 import { AttendanceBadge } from '@/components/attendance-badge'
 import { Button } from '@/components/ui/button'
-import { formatDateTime } from '@/lib/utils'
+import { formatDateTime, toTitleCase } from '@/lib/utils'
 import { ChevronRight } from 'lucide-react'
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -22,7 +22,7 @@ export default function StudentDashboard() {
   const { data: meData, isLoading: meLoading } = useMe()
   const me      = meData?.data
   const profile = me?.profile as { fullName?: string; level?: number } | null
-  const name    = profile?.fullName || me?.user.email?.split('@')[0] || 'Student'
+  const name    = toTitleCase(profile?.fullName || me?.user.email?.split('@')[0] || 'Student')
 
   const { data: attData, isLoading: attLoading } = useMyAttendance({ limit: 10 })
   const recent       = attData?.data?.data || []
