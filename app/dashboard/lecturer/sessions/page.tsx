@@ -40,15 +40,37 @@ function StartDialog() {
 
   const handle = async () => {
     if (!courseId) { toast.error('Select a course'); return }
+    if (!navigator.geolocation) { toast.error('Your browser does not support location — use a phone browser'); return }
+
+    // Check permission state before requesting to show the right error
+    if (navigator.permissions) {
+      const perm = await navigator.permissions.query({ name: 'geolocation' })
+      if (perm.state === 'denied') {
+        toast.error('Location blocked. Enable it in your browser settings then try again.')
+        return
+      }
+    }
+
     setLoading(true)
     let gps: { lecturerLatitude: number; lecturerLongitude: number; lecturerLocationAccuracy: number } | undefined
-    await new Promise<void>((resolve) => {
-      if (!navigator.geolocation) { resolve(); return }
-      navigator.geolocation.getCurrentPosition(
-        (p) => { gps = { lecturerLatitude: p.coords.latitude, lecturerLongitude: p.coords.longitude, lecturerLocationAccuracy: p.coords.accuracy }; resolve() },
-        () => resolve(), { timeout: 5000 }
-      )
-    })
+
+    try {
+      gps = await new Promise<typeof gps>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          (p) => resolve({ lecturerLatitude: p.coords.latitude, lecturerLongitude: p.coords.longitude, lecturerLocationAccuracy: p.coords.accuracy }),
+          (err) => {
+            if (err.code === err.PERMISSION_DENIED) reject(new Error('Location permission denied. Allow location and try again.'))
+            else reject(new Error('Could not get your location. Try again.'))
+          },
+          { timeout: 10000, enableHighAccuracy: true }
+        )
+      })
+    } catch (err: unknown) {
+      toast.error((err as Error).message)
+      setLoading(false)
+      return
+    }
+
     try {
       const res = await start.mutateAsync({ courseId, ...gps })
       toast.success('Session started'); setOpen(false)
