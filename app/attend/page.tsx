@@ -276,18 +276,14 @@ function AttendPage() {
                 <p className="font-semibold">
                   {record.status === 'present' ? 'Attendance recorded' : 'Marked — under review'}
                 </p>
-                {record.flagReason && (
-                  <p className="text-xs text-muted-foreground mt-1">{record.flagReason}</p>
-                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  {record.status === 'present' ? 'You have been marked present for this session.' : 'Your lecturer will review your attendance.'}
+                </p>
               </div>
             </div>
 
             <div className="flex flex-wrap gap-2 pt-1 border-t border-border">
               <AttendanceBadge status={record.status} />
-              <LocationBadge status={record.locationStatus} />
-              {record.fraudScore > 0 && (
-                <span className="text-xs text-muted-foreground">Fraud score: {record.fraudScore}</span>
-              )}
             </div>
 
             <Button variant="outline" size="sm" className="w-full" onClick={() => router.push('/dashboard/student')}>
