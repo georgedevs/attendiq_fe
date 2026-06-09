@@ -80,7 +80,7 @@ function LoginForm() {
         sm+: vertically centred in the remaining space.
       */}
       <div className="main  w-full h-[90vh] flex justify-center p-3 items-center gap-2">
-        <div className="flex-1 flex flex-col sm:justify-center px-5 pt-8 pb-10 sm:py-0">
+        <div className="flex-1 flex flex-col justify-center px-5 py-10 sm:py-0">
           <div className="w-full max-w-sm mx-auto space-y-7">
             {/* Brand */}
             <div>
@@ -157,7 +157,7 @@ function LoginForm() {
           </div>
         </div>
 
-        <div className="heroImg text-white p-6 py-12 flex flex-col gap-3 justify-end w-1/2 rounded-3xl h-full min-h-[80vh] bg-cover bg-blend-overlay bg-center">
+        <div className="heroImg hidden sm:flex text-white p-6 py-12 flex-col gap-3 justify-end w-1/2 rounded-3xl h-full min-h-[80vh] bg-cover bg-blend-overlay bg-center">
           <p className="ttl text-5xl max-w-[550px] font-semibold">
             Smarter Attendance for Smarter Learning.
           </p>
