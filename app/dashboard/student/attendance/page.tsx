@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useMyAttendance } from '@/hooks/use-attendance'
 import { Button } from '@/components/ui/button'
 import { AttendanceListSkeleton } from '@/components/skeletons'
-import { AttendanceBadge, LocationBadge } from '@/components/attendance-badge'
+import { AttendanceBadge } from '@/components/attendance-badge'
 import { formatDateTime } from '@/lib/utils'
 
 export default function StudentAttendancePage() {
@@ -54,15 +54,9 @@ export default function StudentAttendancePage() {
                     <p className="text-xs italic text-muted-foreground mt-0.5">
                       {formatDateTime(r.createdAt)}
                     </p>
-                    {r.fraudScore > 0 && (
-                      <p className="text-xs italic text-muted-foreground mt-1">
-                        Score {r.fraudScore}{r.flagReason ? ` — ${r.flagReason}` : ''}
-                      </p>
-                    )}
                   </div>
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     <AttendanceBadge status={r.status} />
-                    <LocationBadge status={r.locationStatus} />
                   </div>
                 </div>
               )
