@@ -7,7 +7,7 @@ import { useSessions } from '@/hooks/use-sessions'
 import { StatCard } from '@/components/stat-card'
 import { SessionListSkeleton, CourseListSkeleton, StatCardsSkeleton, PageHeaderSkeleton } from '@/components/skeletons'
 import { Button } from '@/components/ui/button'
-import { formatDateTime } from '@/lib/utils'
+import { formatDateTime, toTitleCase } from '@/lib/utils'
 import { ChevronRight, Plus } from 'lucide-react'
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -28,7 +28,7 @@ export default function LecturerDashboard() {
   const me = meData?.data
   const profile = me?.profile as { fullName?: string; id?: string; department?: string } | null
   const lecturerId = profile?.id
-  const name = profile?.fullName || me?.user.email?.split('@')[0] || 'Lecturer'
+  const name = toTitleCase(profile?.fullName || me?.user.email?.split('@')[0] || 'Lecturer')
 
   const { data: coursesData, isLoading: coursesLoading } = useCourses({ limit: 100, lecturerId })
   const { data: activeData, isLoading: activeLoading } = useSessions({ status: 'active', limit: 10 })
