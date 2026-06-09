@@ -52,7 +52,7 @@ export function DashboardSidebar() {
       )}
     >
       {/* Logo row */}
-      <div className="flex h-14 items-center justify-between border-b border-border px-3">
+      <div className="flex h- items-center justify-between border-b border-border px-3">
         {!collapsed && <Logo />}
         <Button
           variant="ghost"

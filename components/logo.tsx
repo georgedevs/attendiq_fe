@@ -1,6 +1,5 @@
 import { GraduationCap } from "lucide-react";
 import { cn } from "@/lib/utils";
-import logo from "@/assets/logo-dark.svg";
 import Image from "next/image";
 export function Logo({ collapsed = false }: { collapsed?: boolean }) {
   return (
@@ -8,7 +7,7 @@ export function Logo({ collapsed = false }: { collapsed?: boolean }) {
       className={cn("flex py-4 items-center gap-2", collapsed && "justify-center")}
     >
       {!collapsed && (
-          <Image src="/logo-dark.svg" alt="Logo" width={200} height={200} />
+          <Image src="/logo.svg" alt="Logo" className="w-[160px] md:w-[200px]" width={180} height={180} />
       )}
 
 
