@@ -70,6 +70,7 @@ function AttendPage() {
   const [gpsSeconds, setGpsSeconds] = useState(0)
   const watchIdRef                = useRef<number | null>(null)
   const timerRef                  = useRef<ReturnType<typeof setInterval> | null>(null)
+  const submittingRef             = useRef(false)
 
   // Dev bypass: email-only login, never shown in production
   const [devEmail, setDevEmail]     = useState('')
@@ -161,7 +162,8 @@ function AttendPage() {
 
   /* ── Step 3: submit ─────────────────────────────────────────────────────── */
   async function submitAttendance(coords?: GPSCoords) {
-    if (!captureToken) return
+    if (!captureToken || submittingRef.current) return
+    submittingRef.current = true
     stopWatch()
     setStep('submitting')
 
@@ -177,6 +179,7 @@ function AttendPage() {
       setRecord((res as ApiSuccess<AttendanceRecord>).data)
       setStep('done')
     } catch (err: unknown) {
+      submittingRef.current = false
       setStep('error')
       setErrorMsg((err as { message?: string })?.message || 'Submission failed.')
     }
