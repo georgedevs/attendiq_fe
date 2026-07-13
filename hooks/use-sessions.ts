@@ -8,6 +8,7 @@ export function useSessions(params?: {
   limit?: number
   courseId?: string
   status?: string
+  enabled?: boolean
 }) {
   const query = new URLSearchParams()
   if (params?.page) query.set('page', String(params.page))
@@ -17,7 +18,9 @@ export function useSessions(params?: {
   const qs = query.toString()
   return useApiQuery<ApiSuccess<PaginatedData<Session & { course?: { code: string; title: string } }>>>(
     ['sessions', params],
-    `/sessions${qs ? `?${qs}` : ''}`
+    `/sessions${qs ? `?${qs}` : ''}`,
+    undefined,
+    { enabled: params?.enabled ?? true }
   )
 }
 
@@ -56,6 +59,17 @@ export function useSessionAction(id: string, action: 'pause' | 'resume' | 'end')
   const qc = useQueryClient()
   return useMutation({
     mutationFn: () => api.patch(`/sessions/${id}/${action}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sessions'] })
+      qc.invalidateQueries({ queryKey: ['sessions', id] })
+    },
+  })
+}
+
+export function useArchiveSession(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.delete(`/sessions/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sessions'] })
       qc.invalidateQueries({ queryKey: ['sessions', id] })

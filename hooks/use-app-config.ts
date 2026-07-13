@@ -1,6 +1,6 @@
 /**
  * Fetches live runtime config from the backend.
- * Values are driven by env vars — changing GPS_GEOFENCE_METERS in .env
+ * Values are driven by env vars: changing GPS_GEOFENCE_METERS in .env
  * and restarting the backend is all that's needed.
  *
  * Cached for 5 minutes (staleTime). Refetches on window focus.
@@ -25,7 +25,7 @@ export function useAppConfig() {
   const { data, isLoading } = useQuery({
     queryKey: ['app-config'],
     queryFn: () => api.get<ApiSuccess<AppConfig>>('/app/config'),
-    staleTime: 5 * 60 * 1000,   // 5 minutes — config rarely changes at runtime
+    staleTime: 5 * 60 * 1000,   // 5 minutes, config rarely changes at runtime
     gcTime:    10 * 60 * 1000,
   })
 

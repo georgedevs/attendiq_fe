@@ -1,14 +1,18 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useMe } from '@/hooks/use-me'
-import { useMyAttendance } from '@/hooks/use-attendance'
+import { useMyAttendance, useMyStats } from '@/hooks/use-attendance'
 import { StatCard } from '@/components/stat-card'
 import { StatCardsSkeleton, AttendanceListSkeleton, PageHeaderSkeleton } from '@/components/skeletons'
 import { AttendanceBadge } from '@/components/attendance-badge'
+import { LocationPermissionBanner } from '@/components/location-permission-banner'
 import { Button } from '@/components/ui/button'
 import { formatDateTime, toTitleCase } from '@/lib/utils'
 import { ChevronRight } from 'lucide-react'
+import { QueryErrorState } from '@/components/query-error-state'
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -19,45 +23,90 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 export default function StudentDashboard() {
-  const { data: meData, isLoading: meLoading } = useMe()
+  const router = useRouter()
+  const { data: meData, isError: meIsError, refetch: refetchMe } = useMe()
   const me      = meData?.data
-  const profile = me?.profile as { fullName?: string; level?: number } | null
+  const profile = me?.profile as { fullName?: string; matricNumber?: string | null } | null
   const name    = toTitleCase(profile?.fullName || me?.user.email?.split('@')[0] || 'Student')
 
-  const { data: attData, isLoading: attLoading } = useMyAttendance({ limit: 10 })
+  // Gate: students must finish onboarding (matric number) before using the app.
+  const needsOnboarding = !!me && me.role === 'student' && !!profile && !profile.matricNumber
+
+  useEffect(() => {
+    if (needsOnboarding) router.replace('/onboarding')
+  }, [needsOnboarding, router])
+
+  const { data: attData, isError: attIsError, refetch: refetchAtt } = useMyAttendance({ limit: 10 })
+  const { data: statsData, isError: statsIsError, refetch: refetchStats } = useMyStats()
+  // "No data yet" (not "is fetching") is the skeleton condition: it also
+  // covers the paused states — token mid-refresh, persisted cache still
+  // restoring — where isLoading is false but rendering would show fallbacks.
+  const attPending   = (!attData && !attIsError) || (!statsData && !statsIsError)
   const recent       = attData?.data?.data || []
-  const total        = attData?.data?.pagination.total ?? 0
-  const presentCount = recent.filter((r) => r.status === 'present').length
-  const rate         = recent.length > 0 ? `${Math.round((presentCount / recent.length) * 100)}%` : '—'
+  // Authoritative stats from the backend — flagged counts as attended, rejected
+  // is excluded — so a student's numbers match what the lecturer sees.
+  const stats        = statsData?.data
+  const attended     = stats?.attended ?? 0
+  const recentAttended = stats?.recent.attended ?? 0
+  const recentWindow = stats?.recent.window ?? 0
+  const rate         = stats && stats.recent.window > 0 ? `${stats.recent.ratePercent}%` : 'N/A'
+
+  const hasError = meIsError || attIsError || statsIsError
+  const refetchAll = () => {
+    refetchMe()
+    refetchAtt()
+    refetchStats()
+  }
+
+  // Don't flash the real dashboard while we still don't know who this is (or
+  // do know and are about to redirect to onboarding). Skeletons mirror the
+  // real layout so there's no jump when content arrives.
+  if (hasError) {
+    return (
+      <div className="space-y-8 py-10">
+        <QueryErrorState message="Failed to load dashboard data. Please check your network connection." onRetry={refetchAll} />
+      </div>
+    )
+  }
+
+  if (!me || needsOnboarding) {
+    return (
+      <div className="space-y-8">
+        <PageHeaderSkeleton />
+        <StatCardsSkeleton count={3} />
+        <AttendanceListSkeleton rows={6} />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-8">
 
       {/* Header */}
-      <div>
-        {meLoading ? <PageHeaderSkeleton /> : (
-          <>
-            <h1 className="text-2xl font-bold tracking-tight">{name}</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {profile?.level
-                ? <><span className="font-medium">{profile.level} Level</span>{' '}<span className="italic">· Caleb University</span></>
-                : <span className="italic">Student · Caleb University</span>
-              }
-            </p>
-          </>
-        )}
+      <div className="space-y-1">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">Welcome back,</p>
+        <h1 className="text-3xl font-extrabold tracking-tight text-foreground">{name}</h1>
+        <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-1">
+          <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse shrink-0" />
+          <span className="italic">Student · Caleb University</span>
+        </p>
       </div>
 
+      {/* Get the location permission sorted before class, not during */}
+      <LocationPermissionBanner />
+
       {/* Stats */}
-      {attLoading ? <StatCardsSkeleton count={3} /> : (
-        <div className="grid grid-cols-3 gap-4">
-          <StatCard label="Sessions"   value={total}        sub="attended" />
-          <StatCard label="Present"    value={presentCount} sub={`of last ${recent.length}`} />
-          <StatCard label="Rate"       value={rate}         sub="attendance" />
+      {attPending ? (
+        <StatCardsSkeleton count={3} />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatCard label="Classes attended" value={attended}       sub="all time" />
+          <StatCard label="Present"          value={recentAttended} sub={recentWindow ? `of last ${recentWindow}` : 'no records yet'} />
+          <StatCard label="Attendance rate"  value={rate}           sub={recentWindow ? `last ${recentWindow} classes` : 'no records yet'} />
         </div>
       )}
 
-      {/* Recent attendance — full width, primary content */}
+      {/* Recent attendance: full width, primary content */}
       <section>
         <div className="flex items-center justify-between mb-4">
           <SectionLabel>Recent attendance</SectionLabel>
@@ -66,7 +115,9 @@ export default function StudentDashboard() {
           </Button>
         </div>
 
-        {attLoading ? <AttendanceListSkeleton rows={6} /> : !recent.length ? (
+        {attPending ? (
+          <AttendanceListSkeleton rows={6} />
+        ) : !recent.length ? (
           <div className="rounded-xl border border-border bg-card px-6 py-14 text-center space-y-2">
             <p className="text-sm font-medium">No attendance yet</p>
             <p className="text-sm italic text-muted-foreground">

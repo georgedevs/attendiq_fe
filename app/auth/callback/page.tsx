@@ -1,45 +1,68 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { saveAuthTokens } from '@/lib/auth'
+import { useQueryClient } from '@tanstack/react-query'
+import { saveAuthTokens, consumePostLoginRedirect } from '@/lib/auth'
+import { resolvePostLoginDestination } from '@/lib/post-login'
 import { toast } from 'sonner'
 import { Suspense } from 'react'
 
 function CallbackHandler() {
   const router = useRouter()
   const params = useSearchParams()
+  const queryClient = useQueryClient()
+  // React 18 strict mode runs effects twice in dev, and the exchange code is
+  // single-use, so guard against firing the POST twice.
+  const exchanged = useRef(false)
 
   useEffect(() => {
-    const token = params.get('token')
+    const code = params.get('code')
     const error = params.get('error')
 
     if (error) {
-      toast.error(`Login failed: ${error}`)
+      toast.error(error)
       router.replace('/login')
       return
     }
 
-    if (token) {
-      // MS OAuth only returns an access token — no refresh token via redirect.
-      // Store just the access token; refresh won't work until backend passes it.
-      saveAuthTokens(token, '')
-      toast.success('Signed in successfully')
-      const role = (typeof window !== 'undefined')
-        ? (() => {
-            try {
-              const payload = JSON.parse(atob(token.split('.')[1]))
-              return payload.role as string
-            } catch {
-              return null
-            }
-          })()
-        : null
-      router.replace(role === 'lecturer' ? '/dashboard/lecturer' : '/dashboard/student')
-    } else {
+    if (!code) {
       router.replace('/login')
+      return
     }
-  }, [params, router])
+
+    if (exchanged.current) return
+    exchanged.current = true
+
+    const exchange = async () => {
+      try {
+        const axios = (await import('axios')).default
+        const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api'
+        const res = await axios.post(`${base}/auth/exchange`, { code })
+        const { accessToken, refreshToken } = res.data.data
+        if (!accessToken || !refreshToken) throw new Error('Malformed token response')
+
+        saveAuthTokens(accessToken, refreshToken)
+        // A fresh session may be a different account; drop anything cached
+        // under the previous one before any page reads it.
+        queryClient.clear()
+        toast.success('Signed in successfully')
+        const redirectTo = consumePostLoginRedirect()
+        if (redirectTo) {
+          router.replace(redirectTo)
+          return
+        }
+        // Resolve onboarding vs dashboard from the server BEFORE navigating,
+        // so the user never sees a dashboard flash on their way to onboarding.
+        router.replace(await resolvePostLoginDestination(queryClient))
+      } catch {
+        toast.error('Sign in expired or was already used. Please try again.')
+        router.replace('/login')
+      }
+    }
+
+    void exchange()
+  }, [params, router, queryClient])
 
   return (
     <div className="flex h-screen items-center justify-center">

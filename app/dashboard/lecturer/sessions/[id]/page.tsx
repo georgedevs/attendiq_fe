@@ -5,9 +5,10 @@ import Link from 'next/link'
 import { toast } from 'sonner'
 import {
   Pause, Play, Square, ArrowLeft, Users, Wifi, WifiOff,
-  Monitor, Plus, Pencil, Loader2, Download,
+  Monitor, Plus, Pencil, Loader2, Download, Share2, Search,
 } from 'lucide-react'
-import { useSession, useSessionAction, useSessionQr } from '@/hooks/use-sessions'
+import { useSession, useSessionAction, useSessionQr, useArchiveSession } from '@/hooks/use-sessions'
+import { ArchiveConfirmDialog } from '@/components/archive-confirm-dialog'
 import { useLiveFeed } from '@/hooks/use-sse'
 import {
   useSessionAttendance,
@@ -19,6 +20,7 @@ import { Input } from '@/components/ui/input'
 import { QrDisplay } from '@/components/qr-display'
 import { AttendanceBadge } from '@/components/attendance-badge'
 import { ConfirmDialog } from '@/components/confirm-dialog'
+import { QueryErrorState } from '@/components/query-error-state'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -41,9 +43,11 @@ function StatusDot({ status }: { status: string }) {
 
 function Controls({ sessionId, status }: { sessionId: string; status: string }) {
   const [confirmEnd, setConfirmEnd] = useState(false)
+  const [confirmArchive, setConfirmArchive] = useState(false)
   const pause  = useSessionAction(sessionId, 'pause')
   const resume = useSessionAction(sessionId, 'resume')
   const end    = useSessionAction(sessionId, 'end')
+  const archive = useArchiveSession(sessionId)
 
   const act = (m: typeof pause, label: string) => async () => {
     try { await m.mutateAsync(); toast.success(`Session ${label}`) }
@@ -72,6 +76,13 @@ function Controls({ sessionId, status }: { sessionId: string; status: string }) 
             <Square className="h-3.5 w-3.5 mr-1.5" /> End
           </Button>
         )}
+        <Button
+          variant="outline" size="sm"
+          className="border-destructive/30 text-destructive hover:text-white hover:bg-destructive"
+          onClick={() => setConfirmArchive(true)}
+        >
+          Archive
+        </Button>
       </div>
 
       <ConfirmDialog
@@ -82,6 +93,20 @@ function Controls({ sessionId, status }: { sessionId: string; status: string }) 
         actionLabel="End session"
         destructive
         onConfirm={act(end, 'ended')}
+      />
+
+      <ArchiveConfirmDialog
+        open={confirmArchive}
+        onOpenChange={setConfirmArchive}
+        onConfirm={async () => {
+          try {
+            await archive.mutateAsync()
+            toast.success('Session archived')
+            window.location.href = '/dashboard/lecturer/sessions'
+          } catch {
+            toast.error('Failed to archive session')
+          }
+        }}
       />
     </>
   )
@@ -151,7 +176,7 @@ function EditStatusDialog({
   )
 }
 
-/* ── Manual add dialog — search any student, no enrollment required ─────────── */
+/* Manual add dialog: search any student, no enrollment required */
 
 function AddManualDialog({
   sessionId,
@@ -243,16 +268,17 @@ function AddManualDialog({
 /* ── CSV download helper ────────────────────────────────────────────────────── */
 
 function downloadCSV(records: AttendanceRow[], courseCode: string) {
-  const headers = ['Name', 'Matric Number', 'Status', 'Location', 'Fraud Score', 'Added Manually', 'Time']
-  const rows = records.map((r) => [
-    r.studentName,
-    r.matricNumber ?? '',
-    r.status,
-    r.locationStatus,
-    String(r.fraudScore),
-    r.isManual ? 'Yes' : 'No',
-    new Date(r.createdAt).toLocaleString(),
-  ])
+  const headers = ['Name', 'Matric Number', 'Status', 'Time']
+  // Rejected check-ins failed verification — the student was not counted present,
+  // so they're excluded from the exported attendance record.
+  const rows = records
+    .filter((r) => r.status !== 'rejected')
+    .map((r) => [
+      r.studentName,
+      r.matricNumber ?? '',
+      r.status,
+      new Date(r.createdAt).toLocaleString(),
+    ])
 
   const csv = [headers, ...rows]
     .map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(','))
@@ -268,22 +294,51 @@ function downloadCSV(records: AttendanceRow[], courseCode: string) {
   URL.revokeObjectURL(url)
 }
 
+/* ── Record search ──────────────────────────────────────────────────────────── */
+
+function filterRecords(records: AttendanceRow[], query: string): AttendanceRow[] {
+  const q = query.toLowerCase().trim()
+  if (!q) return records
+  return records.filter(
+    (r) =>
+      r.studentName.toLowerCase().includes(q) ||
+      (r.matricNumber ?? '').toLowerCase().includes(q),
+  )
+}
+
+function RecordSearchInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="relative">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Search by name or matric number…"
+        className="pl-9 h-9"
+      />
+    </div>
+  )
+}
+
 /* ── Full attendance list panel ─────────────────────────────────────────────── */
 
 function AttendanceListPanel({
   sessionId,
+  records,
+  pending,
   sessionEnded,
   courseCode,
 }: {
   sessionId: string
+  records: AttendanceRow[]
+  pending: boolean
   sessionEnded: boolean
   courseCode: string
 }) {
-  const { data, isLoading } = useSessionAttendance(sessionId)
   const [editRecord, setEditRecord] = useState<AttendanceRow | null>(null)
   const [addOpen, setAddOpen] = useState(false)
-
-  const records = data?.data?.records ?? []
+  const [query, setQuery] = useState('')
+  const visible = filterRecords(records, query)
 
   return (
     <>
@@ -293,9 +348,11 @@ function AttendanceListPanel({
             <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
               Attendance List
             </p>
-            {!isLoading && (
+            {!pending && (
               <p className="text-xs italic text-muted-foreground mt-0.5">
-                {records.length} student{records.length !== 1 ? 's' : ''} marked
+                {query
+                  ? `${visible.length} of ${records.length} student${records.length !== 1 ? 's' : ''}`
+                  : `${records.length} student${records.length !== 1 ? 's' : ''} marked`}
               </p>
             )}
           </div>
@@ -314,7 +371,13 @@ function AttendanceListPanel({
           </div>
         </div>
 
-        {isLoading ? (
+        {records.length > 0 && (
+          <div className="mb-4">
+            <RecordSearchInput value={query} onChange={setQuery} />
+          </div>
+        )}
+
+        {pending ? (
           <div className="space-y-3">
             {[1, 2, 3, 4].map((i) => (
               <div key={i} className="flex items-center justify-between py-2">
@@ -331,9 +394,16 @@ function AttendanceListPanel({
             <Users className="h-8 w-8 text-muted-foreground/20" />
             <p className="text-sm italic text-muted-foreground">No attendance records yet.</p>
           </div>
+        ) : !visible.length ? (
+          <div className="flex flex-col items-center justify-center h-40 gap-3 text-center">
+            <Search className="h-8 w-8 text-muted-foreground/20" />
+            <p className="text-sm italic text-muted-foreground">
+              No students match &ldquo;{query.trim()}&rdquo;.
+            </p>
+          </div>
         ) : (
           <div className="divide-y divide-border -mx-1 px-1 max-h-[600px] overflow-y-auto">
-            {records.map((r) => (
+            {visible.map((r) => (
               <div key={r.id} className="flex items-center justify-between py-3 gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -386,8 +456,16 @@ function AttendanceListPanel({
 
 export default function SessionLivePage({ params }: { params: Promise<{ id: string }> }) {
   const { id }  = use(params)
-  const { data, isLoading } = useSession(id)
+  const { data, isError: sessionIsError, refetch: refetchSession } = useSession(id)
   const session  = data?.data
+
+  const { data: attendanceData, isError: attendanceIsError, refetch: refetchAttendance } = useSessionAttendance(id)
+  const attendancePending = !attendanceData && !attendanceIsError
+  const records = attendanceData?.data?.records ?? []
+
+  // Skeleton whenever there's no session data yet, not just while a fetch is
+  // in flight — covers paused/restoring states without fallbacks.
+  const pending  = !data && !sessionIsError
   const isActive  = session?.status === 'active'
   const isEnded   = session?.status === 'ended'
   const { events, connected } = useLiveFeed(id, isActive)
@@ -398,16 +476,44 @@ export default function SessionLivePage({ params }: { params: Promise<{ id: stri
   const displayCodeFmt = displayCode ? `${displayCode.slice(0, 3)}-${displayCode.slice(3)}` : null
   const course = session?.course as { code: string; title: string } | undefined
 
+  const copyDirectLink = () => {
+    if (!displayToken) return
+    const directLink = `${window.location.origin}/attend?s=${id}&token=${displayToken}`
+    navigator.clipboard.writeText(directLink)
+    toast.success('Direct attendance link copied to clipboard!')
+  }
+
+  const hasError = sessionIsError || attendanceIsError
+  const refetchAll = () => {
+    refetchSession()
+    refetchAttendance()
+  }
+
+  if (hasError) {
+    return (
+      <div className="space-y-8 py-10">
+        <QueryErrorState
+          message="Failed to load session details. Please check your network connection."
+          onRetry={refetchAll}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
 
       {/* ── Header ──────────────────────────────────────────────── */}
       <div className="flex items-start gap-3">
         <Button variant="ghost" size="icon" asChild className="h-8 w-8 shrink-0 mt-0.5">
-          <Link href="/dashboard/lecturer/sessions"><ArrowLeft className="h-4 w-4" /></Link>
+          {/* Return to this session's own course-filtered list, not the generic
+              unfiltered one, otherwise going back drops the course context. */}
+          <Link href={session?.courseId ? `/dashboard/lecturer/sessions?courseId=${session.courseId}` : '/dashboard/lecturer/sessions'}>
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
         </Button>
         <div className="flex-1 min-w-0">
-          {isLoading ? (
+          {pending ? (
             <div className="space-y-2"><Skeleton className="h-7 w-32" /><Skeleton className="h-4 w-56" /></div>
           ) : (
             <>
@@ -427,7 +533,7 @@ export default function SessionLivePage({ params }: { params: Promise<{ id: stri
             </>
           )}
         </div>
-        {session && session.status !== 'ended' && (
+        {session && (
           <Controls sessionId={id} status={session.status} />
         )}
       </div>
@@ -449,6 +555,14 @@ export default function SessionLivePage({ params }: { params: Promise<{ id: stri
               </span><br />
               and enter this code on any screen or tablet.
             </p>
+            {displayToken && (
+              <Button
+                variant="outline" size="sm"
+                onClick={copyDirectLink}
+              >
+                <Share2 className="h-3.5 w-3.5 mr-1.5" /> Copy Link
+              </Button>
+            )}
             <Button
               variant="outline" size="sm"
               onClick={() => window.open(
@@ -462,7 +576,7 @@ export default function SessionLivePage({ params }: { params: Promise<{ id: stri
         </div>
       )}
 
-      {/* ── QR + Live feed — hidden once session ends ───────────── */}
+      {/* QR + Live feed: hidden once session ends */}
       {!isEnded && <div className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-5">
 
         {/* QR panel */}
@@ -475,7 +589,7 @@ export default function SessionLivePage({ params }: { params: Promise<{ id: stri
               <div className="flex items-center justify-center h-64 w-full">
                 <p className="text-sm italic text-muted-foreground text-center px-4">
                   {session?.status === 'paused'
-                    ? 'Session paused — resume to show the QR code.'
+                    ? 'Session paused. Resume to show the QR code.'
                     : 'Session has ended.'}
                 </p>
               </div>
@@ -484,14 +598,14 @@ export default function SessionLivePage({ params }: { params: Promise<{ id: stri
                 <QrDisplay sessionId={id} />
                 <p className="text-xs italic text-muted-foreground text-center mt-5 leading-relaxed max-w-xs">
                   Students scan this with their phone browser.
-                  The code rotates every {stepSeconds}s — screenshots won&apos;t work.
+                  The code rotates every {stepSeconds}s, screenshots won&apos;t work.
                 </p>
               </>
             )}
           </div>
         </div>
 
-        {/* Live feed / all records — tabbed */}
+        {/* Live feed / all records: tabbed */}
         <div className="rounded-xl border border-border bg-card p-6">
           <Tabs defaultValue="live">
             <div className="flex items-center justify-between mb-5">
@@ -512,7 +626,7 @@ export default function SessionLivePage({ params }: { params: Promise<{ id: stri
               </span>
             </div>
 
-            {/* Live tab — SSE stream */}
+            {/* Live tab: SSE stream */}
             <TabsContent value="live">
               {!events.length ? (
                 <div className="flex flex-col items-center justify-center h-56 gap-3 text-center">
@@ -536,7 +650,7 @@ export default function SessionLivePage({ params }: { params: Promise<{ id: stri
               )}
             </TabsContent>
 
-            {/* All records tab — full editable list */}
+            {/* All records tab: full editable list */}
             <TabsContent value="all">
               <AllRecordsTab sessionId={id} />
             </TabsContent>
@@ -544,8 +658,8 @@ export default function SessionLivePage({ params }: { params: Promise<{ id: stri
         </div>
       </div>}
 
-      {/* ── Full attendance management ───────────────────────────── */}
-      {/* For ended sessions this is the primary content — shown full width */}
+      {/* Full attendance management */}
+      {/* For ended sessions this is the primary content, shown full width */}
       {isEnded ? (
         <div className="space-y-3">
           <div>
@@ -556,6 +670,8 @@ export default function SessionLivePage({ params }: { params: Promise<{ id: stri
           </div>
           <AttendanceListPanel
             sessionId={id}
+            records={records}
+            pending={attendancePending}
             sessionEnded={true}
             courseCode={course?.code ?? 'attendance'}
           />
@@ -563,6 +679,8 @@ export default function SessionLivePage({ params }: { params: Promise<{ id: stri
       ) : (
         <AttendanceListPanel
           sessionId={id}
+          records={records}
+          pending={attendancePending}
           sessionEnded={false}
           courseCode={course?.code ?? 'attendance'}
         />
@@ -573,13 +691,22 @@ export default function SessionLivePage({ params }: { params: Promise<{ id: stri
 
 /* Inline all-records tab content (reuses the same hooks/components) */
 function AllRecordsTab({ sessionId }: { sessionId: string }) {
-  const { data, isLoading } = useSessionAttendance(sessionId)
+  const { data } = useSessionAttendance(sessionId)
   const [editRecord, setEditRecord] = useState<AttendanceRow | null>(null)
+  const [query, setQuery] = useState('')
+  // Skeleton whenever there's no data to show yet, not just while fetching.
+  const pending = !data
   const records = data?.data?.records ?? []
+  const visible = filterRecords(records, query)
 
   return (
     <>
-      {isLoading ? (
+      {records.length > 0 && (
+        <div className="mb-4">
+          <RecordSearchInput value={query} onChange={setQuery} />
+        </div>
+      )}
+      {pending ? (
         <div className="space-y-3 py-2">
           {[1,2,3].map(i => (
             <div key={i} className="flex items-center justify-between">
@@ -593,13 +720,22 @@ function AllRecordsTab({ sessionId }: { sessionId: string }) {
           <Users className="h-8 w-8 text-muted-foreground/20" />
           <p className="text-sm italic text-muted-foreground">No records yet.</p>
         </div>
+      ) : !visible.length ? (
+        <div className="flex flex-col items-center justify-center h-56 gap-3 text-center">
+          <Search className="h-8 w-8 text-muted-foreground/20" />
+          <p className="text-sm italic text-muted-foreground">
+            No students match &ldquo;{query.trim()}&rdquo;.
+          </p>
+        </div>
       ) : (
         <div className="divide-y divide-border overflow-y-auto max-h-80 -mx-1 px-1">
-          {records.map((r) => (
+          {visible.map((r) => (
             <div key={r.id} className="flex items-center justify-between py-3 gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-medium">{r.studentName}</p>
-                <p className="text-xs italic text-muted-foreground">{formatDateTime(r.createdAt)}</p>
+                <p className="text-xs italic text-muted-foreground">
+                  {r.matricNumber ? `${r.matricNumber} · ` : ''}{formatDateTime(r.createdAt)}
+                </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <AttendanceBadge status={r.status as 'present' | 'flagged' | 'rejected'} />

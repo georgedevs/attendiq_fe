@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -16,10 +16,22 @@ import { cn } from '@/lib/utils'
 export function DashboardHeader() {
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
-  const role = getStoredRole()
+  const [role, setRole] = useState<string | null>(null)
+
+  useEffect(() => {
+    setRole(getStoredRole())
+  }, [])
+
+  const defaultRole = pathname?.startsWith('/dashboard/lecturer')
+    ? 'lecturer'
+    : pathname?.startsWith('/dashboard/student')
+      ? 'student'
+      : null
+
+  const resolvedRole = role || defaultRole
 
   const nav =
-    role === 'lecturer'
+    resolvedRole === 'lecturer'
       ? [
           { name: 'Overview', href: '/dashboard/lecturer', icon: Home, exact: true },
           { name: 'Courses', href: '/dashboard/lecturer/courses', icon: GraduationCap },

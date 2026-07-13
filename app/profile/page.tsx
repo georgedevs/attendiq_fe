@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Loader2, Save, LogOut } from 'lucide-react'
 import { useMe } from '@/hooks/use-me'
@@ -17,35 +18,57 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { logout } from '@/lib/auth'
 import type { ApiSuccess, MeResponse } from '@/lib/types'
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+/**
+ * A settings "row": label + description on the left, content card on the right.
+ * Stacks on mobile, splits into two columns on desktop so the page fills the
+ * width instead of floating a narrow column in the top-left corner.
+ */
+function SettingsSection({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description: string
+  children: React.ReactNode
+}) {
   return (
-    <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
-      {children}
-    </p>
+    <section className="grid gap-3 lg:grid-cols-[minmax(0,240px)_1fr] lg:gap-8">
+      <div className="lg:pt-1">
+        <p className="text-sm font-semibold tracking-tight">{title}</p>
+        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{description}</p>
+      </div>
+      <div className="min-w-0">{children}</div>
+    </section>
   )
 }
 
 function ProfileForm() {
-  const { data, isLoading } = useMe()
+  const { data } = useMe()
   const me = data?.data
+  // Skeleton whenever there's no data to show yet, not just while fetching —
+  // covers paused/restoring states without flashing empty fields.
+  const isLoading = !data
   const invalidate = useInvalidate()
   const router = useRouter()
+  const queryClient = useQueryClient()
 
   const handleLogout = async () => {
     await logout()
+    // Same as the sidebar menu: never leave the previous account's cached
+    // data behind for the next login on this device.
+    queryClient.clear()
     router.push('/login')
   }
 
   const [fullName, setFullName]     = useState('')
-  const [level, setLevel]           = useState('')
   const [department, setDepartment] = useState('')
   const [dirty, setDirty]           = useState(false)
 
   useEffect(() => {
     if (!me?.profile) return
-    const p = me.profile as { fullName?: string; level?: number; department?: string }
+    const p = me.profile as { fullName?: string; department?: string }
     setFullName(p.fullName || '')
-    setLevel(String(p.level || ''))
     setDepartment(p.department || '')
   }, [me])
 
@@ -63,13 +86,12 @@ function ProfileForm() {
 
   const handleSave = () => {
     const body: Record<string, unknown> = { fullName }
-    if (me?.role === 'student' && level) body.level = Number(level)
     if (me?.role === 'lecturer') body.department = department
     updateMutation.mutate(body)
   }
 
   return (
-    <div className="max-w-lg space-y-8">
+    <div className="max-w-4xl space-y-8">
 
       {/* Header */}
       <div>
@@ -77,9 +99,10 @@ function ProfileForm() {
         <p className="text-sm italic text-muted-foreground mt-1">Your account and personal information</p>
       </div>
 
-      {/* Account info — read-only */}
-      <section className="space-y-4">
-        <SectionLabel>Account</SectionLabel>
+      <div className="border-t border-border" />
+
+      {/* Account info: read-only */}
+      <SettingsSection title="Account" description="Your login identity and current account status.">
         <div className="rounded-xl border border-border bg-card overflow-hidden">
           {isLoading ? (
             <div className="px-4 py-3.5 space-y-2">
@@ -90,7 +113,7 @@ function ProfileForm() {
             <div className="divide-y divide-border">
               <div className="px-4 py-3.5">
                 <p className="text-xs italic text-muted-foreground mb-0.5">Email</p>
-                <p className="text-sm font-medium">{me?.user.email}</p>
+                <p className="text-sm font-medium break-all">{me?.user.email}</p>
               </div>
               <div className="px-4 py-3.5 flex items-center justify-between">
                 <div>
@@ -105,23 +128,12 @@ function ProfileForm() {
             </div>
           )}
         </div>
-      </section>
+      </SettingsSection>
 
-      {/* Sign out — visible on mobile where sidebar is hidden */}
-      <section className="lg:hidden">
-        <Button
-          variant="destructive"
-          className="w-full"
-          onClick={handleLogout}
-        >
-          <LogOut className="h-4 w-4 mr-2" />
-          Sign out
-        </Button>
-      </section>
+      <div className="border-t border-border" />
 
       {/* Editable profile fields */}
-      <section className="space-y-4">
-        <SectionLabel>Profile details</SectionLabel>
+      <SettingsSection title="Profile details" description="Update the information shown across AttendIQ.">
         <div className="rounded-xl border border-border bg-card p-5 space-y-4">
           {isLoading ? (
             <div className="space-y-4">
@@ -140,30 +152,19 @@ function ProfileForm() {
               </div>
 
               {me?.role === 'student' && (
-                <>
-                  <div className="space-y-1.5">
-                    <Label>Level</Label>
-                    <Input
-                      type="number" min={100} max={700} step={100}
-                      value={level}
-                      onChange={(e) => { setLevel(e.target.value); setDirty(true) }}
-                      placeholder="100"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="flex items-center justify-between">
-                      Matric Number
-                      <span className="text-[10px] italic text-muted-foreground font-normal">
-                        Assigned by registrar
-                      </span>
-                    </Label>
-                    <Input
-                      value={(me.profile as { matricNumber?: string | null })?.matricNumber || ''}
-                      disabled
-                      placeholder="Pending assignment"
-                    />
-                  </div>
-                </>
+                <div className="space-y-1.5">
+                  <Label className="flex items-center justify-between">
+                    Matric Number
+                    <span className="text-[10px] italic text-muted-foreground font-normal">
+                      Cannot be changed
+                    </span>
+                  </Label>
+                  <Input
+                    value={(me.profile as { matricNumber?: string | null })?.matricNumber || ''}
+                    disabled
+                    placeholder="Pending assignment"
+                  />
+                </div>
               )}
 
               {me?.role === 'lecturer' && (
@@ -192,17 +193,34 @@ function ProfileForm() {
                 </>
               )}
 
-              <Button onClick={handleSave} disabled={!dirty || updateMutation.isPending} className="w-full sm:w-auto">
-                {updateMutation.isPending
-                  ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
-                  : <Save className="h-4 w-4 mr-1.5" />
-                }
-                Save changes
-              </Button>
+              <div className="pt-1">
+                <Button onClick={handleSave} disabled={!dirty || updateMutation.isPending} className="w-full sm:w-auto">
+                  {updateMutation.isPending
+                    ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                    : <Save className="h-4 w-4 mr-1.5" />
+                  }
+                  Save changes
+                </Button>
+              </div>
             </>
           )}
         </div>
-      </section>
+      </SettingsSection>
+
+      {/* Sign out: mobile only — on desktop the sidebar has its own sign-out */}
+      <div className="lg:hidden space-y-8">
+        <div className="border-t border-border" />
+        <SettingsSection title="Session" description="Sign out of AttendIQ on this device.">
+          <Button
+            variant="destructive"
+            className="w-full sm:w-auto"
+            onClick={handleLogout}
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            Sign out
+          </Button>
+        </SettingsSection>
+      </div>
     </div>
   )
 }

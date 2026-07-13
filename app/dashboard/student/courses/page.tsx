@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
-// Enrollment no longer exists — students just scan QR codes.
+// Enrollment no longer exists. Students just scan QR codes.
 // Redirect anyone who lands here to their attendance history.
 export default function StudentCoursesRedirect() {
   const router = useRouter()

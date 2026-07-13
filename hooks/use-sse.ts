@@ -46,7 +46,7 @@ export function useLiveFeed(sessionId: string, enabled = true) {
 
     es.addEventListener('error', () => {
       setConnected(false)
-      // EventSource auto-reconnects — no manual retry needed
+      // EventSource auto-reconnects, no manual retry needed
     })
 
     return () => {

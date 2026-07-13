@@ -36,7 +36,7 @@ export function QrDisplay({ sessionId }: QrDisplayProps) {
   }, [qr, scheduleRefresh])
 
   // Use the current page's origin so the QR works regardless of how the
-  // frontend is accessed — forwarded port, ngrok, local IP, or production domain.
+  // frontend is accessed: forwarded port, ngrok, local IP, or production domain.
   const qrUrl = qr
     ? `${window.location.origin}/attend?t=${qr.token}&s=${qr.sessionId}`
     : ''
@@ -69,7 +69,7 @@ export function QrDisplay({ sessionId }: QrDisplayProps) {
 
   return (
     <div className="flex flex-col items-center gap-4">
-      {/* QR code — white background so it's scannable in any theme */}
+      {/* QR code: white background so it's scannable in any theme */}
       <div className="rounded-xl border border-border bg-white p-4">
         <QRCodeSVG
           value={qrUrl}

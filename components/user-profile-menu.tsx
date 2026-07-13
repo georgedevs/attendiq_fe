@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { LogOut, User, Settings } from 'lucide-react'
 import { logout } from '@/lib/auth'
 import { useMe } from '@/hooks/use-me'
@@ -26,6 +27,7 @@ function getInitials(name: string): string {
 
 export function UserProfileMenu({ isCollapsed }: { isCollapsed?: boolean }) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { data } = useMe()
   const me = data?.data
   const name = toTitleCase(
@@ -34,6 +36,9 @@ export function UserProfileMenu({ isCollapsed }: { isCollapsed?: boolean }) {
 
   const handleLogout = async () => {
     await logout()
+    // Wipe every cached query so the next account on this device never sees
+    // the previous user's data (/me role, attendance, courses...).
+    queryClient.clear()
     router.push('/login')
   }
 

@@ -42,7 +42,14 @@ export function DashboardSidebar() {
     localStorage.setItem('sidebar-collapsed', JSON.stringify(next))
   }
 
-  const nav = role === 'lecturer' ? lecturerNav : studentNav
+  const defaultRole = pathname?.startsWith('/dashboard/lecturer')
+    ? 'lecturer'
+    : pathname?.startsWith('/dashboard/student')
+      ? 'student'
+      : null
+
+  const resolvedRole = role || defaultRole
+  const nav = resolvedRole === 'lecturer' ? lecturerNav : studentNav
 
   return (
     <aside

@@ -61,6 +61,30 @@ export function useManualAttendance(sessionId: string) {
   })
 }
 
+export interface CourseAttendanceSummaryStudent {
+  studentId: string
+  studentName: string
+  matricNumber: string | null
+  sessionsAttended: number
+  totalSessions: number
+  attendancePercentage: number
+}
+
+interface CourseAttendanceSummary {
+  course: { id: string; code: string; title: string }
+  totalSessions: number
+  students: CourseAttendanceSummaryStudent[]
+}
+
+export function useCourseAttendanceSummary(courseId: string) {
+  return useQuery({
+    queryKey: ['course-attendance-summary', courseId],
+    queryFn: () =>
+      api.get<ApiSuccess<CourseAttendanceSummary>>(`/attend/course/${courseId}/summary`),
+    enabled: !!courseId,
+  })
+}
+
 export function useUpdateAttendanceStatus(sessionId: string) {
   const qc = useQueryClient()
   return useMutation({

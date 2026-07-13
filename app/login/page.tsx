@@ -2,10 +2,17 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { LoginPageSkeleton } from "@/components/skeletons";
-import { isAuthenticated, saveAuthTokens, getStoredRole } from "@/lib/auth";
+import {
+  isAuthenticated,
+  saveAuthTokens,
+  setPostLoginRedirect,
+  isDevBypassEnabled,
+} from "@/lib/auth";
+import { resolvePostLoginDestination } from "@/lib/post-login";
 import { api } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +20,6 @@ import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Logo } from "@/components/logo";
 import type { ApiSuccess } from "@/lib/types";
-import Image from "next/image";
 
 interface LoginResult {
   accessToken: string;
@@ -23,24 +29,24 @@ interface LoginResult {
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const redirectTo = searchParams.get("redirect");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated()) navigate();
+    if (isAuthenticated()) void navigate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function navigate() {
+  // Ask the server who this user is BEFORE navigating, so we route straight
+  // to onboarding (or the right dashboard) with no intermediate page flash.
+  async function navigate() {
     if (redirectTo) {
       router.replace(redirectTo);
       return;
     }
-    const role = getStoredRole();
-    router.replace(
-      role === "lecturer" ? "/dashboard/lecturer" : "/dashboard/student",
-    );
+    router.replace(await resolvePostLoginDestination(queryClient));
   }
 
   const handleDev = async (e: React.FormEvent) => {
@@ -54,15 +60,17 @@ function LoginForm() {
       const { accessToken, refreshToken } = (res as ApiSuccess<LoginResult>)
         .data;
       saveAuthTokens(accessToken, refreshToken);
-      navigate();
+      // Fresh session may be a different account; drop the previous cache.
+      queryClient.clear();
+      await navigate();
     } catch (err: unknown) {
       toast.error((err as { message?: string })?.message ?? "Login failed");
-    } finally {
       setLoading(false);
     }
   };
 
   const handleMicrosoft = () => {
+    if (redirectTo) setPostLoginRedirect(redirectTo);
     const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
     window.location.href = `${base}/auth/microsoft`;
   };
@@ -76,7 +84,7 @@ function LoginForm() {
       </div>
 
       {/*
-        Mobile: content starts near the top — no vertical centering.
+        Mobile: content starts near the top, no vertical centering.
         sm+: vertically centred in the remaining space.
       */}
       <div className="main  w-full h-[90vh] flex justify-center p-3 items-center gap-2">
@@ -108,51 +116,55 @@ function LoginForm() {
                 Continue with Microsoft
               </Button>
 
-              {/* Divider */}
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t border-border" />
-                </div>
-                <div className="relative flex justify-center">
-                  <span className="bg-background px-3 text-xs text-muted-foreground">
-                    or dev bypass
-                  </span>
-                </div>
-              </div>
+              {isDevBypassEnabled() && (
+                <>
+                  {/* Divider */}
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t border-border" />
+                    </div>
+                    <div className="relative flex justify-center">
+                      <span className="bg-background px-3 text-xs text-muted-foreground">
+                        or dev bypass
+                      </span>
+                    </div>
+                  </div>
 
-              {/* Dev login form */}
-              <form onSubmit={handleDev} className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="email" className="text-sm">
-                    Email address
-                  </Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="your@calebuniversity.edu.ng"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    autoComplete="email"
-                    className="h-11"
-                  />
-                </div>
-                <Button
-                  type="submit"
-                  className="w-full h-11"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    "Sign in"
-                  )}
-                </Button>
-                <p className="text-xs text-muted-foreground">
-                  Prefix <code className="font-mono">std</code> = student ·
-                  anything else = lecturer
-                </p>
-              </form>
+                  {/* Dev login form */}
+                  <form onSubmit={handleDev} className="space-y-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="email" className="text-sm">
+                        Email address
+                      </Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        placeholder="your@calebuniversity.edu.ng"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        autoComplete="email"
+                        className="h-11"
+                      />
+                    </div>
+                    <Button
+                      type="submit"
+                      className="w-full h-11"
+                      disabled={loading}
+                    >
+                      {loading ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        "Sign in"
+                      )}
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Prefix <code className="font-mono">std</code> = student ·
+                      anything else = lecturer
+                    </p>
+                  </form>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -166,23 +178,6 @@ function LoginForm() {
             attendance faster, easier, and more reliable for lecturers and
             students
           </p>
-
-          <div className="w-max text-xs p-1.5 gap-2 items-center pr-4 mt-4 bg-white text-black  rounded-full flex">
-            <div style={{ overflow: "hidden" }} className="rounded-full">
-              <Image
-                alt="Caleb"
-                style={{ overflow: "hidden" }}
-                className="rounded-full"
-                src="/caleb.png"
-                height={55}
-                width={55}
-              />
-            </div>
-            <div className="">
-              A PRODUCT OF
-              <p className="font-bold">CALEB UNIVERSITY INNOVATION</p>
-            </div>
-          </div>
         </div>
       </div>
     </div>

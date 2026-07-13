@@ -22,7 +22,7 @@ export function StatCard({ label, value, sub, loading, className }: StatCardProp
         className
       )}
     >
-      {/* Label — uppercase tracking, muted, small */}
+      {/* Label: uppercase tracking, muted, small */}
       <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
         {label}
       </p>

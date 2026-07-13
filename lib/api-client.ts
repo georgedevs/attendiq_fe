@@ -39,7 +39,7 @@ apiClient.interceptors.response.use(
   async (error: AxiosError) => {
     const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
 
-    const skipRefresh = ['/auth/refresh', '/v2/auth/login'].some((p) =>
+    const skipRefresh = ['/auth/refresh', '/auth/exchange', '/v2/auth/login'].some((p) =>
       original?.url?.includes(p)
     )
 
@@ -70,10 +70,17 @@ apiClient.interceptors.response.use(
         return apiClient(original)
       } catch (refreshErr) {
         processQueue(refreshErr, null)
-        removeAuthTokens()
-        if (typeof window !== 'undefined') {
-          const path = window.location.pathname
-          if (!['/login'].includes(path)) window.location.href = '/login'
+        // Only kill the session when the refresh endpoint itself rejected the
+        // token (4xx). If the refresh request never reached the server or the
+        // server errored (network blip, campus wifi drop, 5xx), keep the
+        // tokens — the next 401 will retry the refresh.
+        const status = (refreshErr as { response?: { status?: number } })?.response?.status
+        if (status && status >= 400 && status < 500) {
+          removeAuthTokens()
+          if (typeof window !== 'undefined') {
+            const path = window.location.pathname
+            if (!['/login'].includes(path)) window.location.href = '/login'
+          }
         }
         return Promise.reject(refreshErr)
       } finally {

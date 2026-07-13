@@ -1,13 +1,17 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useMe } from '@/hooks/use-me'
 import { useCourses } from '@/hooks/use-courses'
 import { useSessions } from '@/hooks/use-sessions'
 import { StatCard } from '@/components/stat-card'
+import { LocationPermissionBanner } from '@/components/location-permission-banner'
 import { SessionListSkeleton, CourseListSkeleton, StatCardsSkeleton, PageHeaderSkeleton } from '@/components/skeletons'
 import { Button } from '@/components/ui/button'
 import { formatDateTime, toTitleCase } from '@/lib/utils'
+import { QueryErrorState } from '@/components/query-error-state'
 import { ChevronRight, Plus } from 'lucide-react'
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -24,58 +28,105 @@ function StatusDot({ status }: { status: string }) {
 }
 
 export default function LecturerDashboard() {
-  const { data: meData, isLoading: meLoading } = useMe()
+  const router = useRouter()
+  const { data: meData, isError: meIsError, refetch: refetchMe } = useMe()
   const me = meData?.data
   const profile = me?.profile as { fullName?: string; id?: string; department?: string } | null
   const lecturerId = profile?.id
   const name = toTitleCase(profile?.fullName || me?.user.email?.split('@')[0] || 'Lecturer')
 
-  const { data: coursesData, isLoading: coursesLoading } = useCourses({ limit: 100, lecturerId })
-  const { data: activeData, isLoading: activeLoading } = useSessions({ status: 'active', limit: 10 })
-  const { data: recentData, isLoading: recentLoading } = useSessions({ limit: 10 })
+  // Gate: lecturers must finish onboarding (department) before using the app.
+  const needsOnboarding = !!me && me.role === 'lecturer' && !!profile && !profile.department
+
+  useEffect(() => {
+    if (needsOnboarding) router.replace('/onboarding/lecturer')
+  }, [needsOnboarding, router])
+
+  const { data: coursesData, isError: coursesIsError, refetch: refetchCourses } = useCourses({ limit: 100 })
+  const { data: activeData, isError: activeIsError, refetch: refetchActive } = useSessions({ status: 'active', limit: 10 })
+  const { data: recentData, isError: recentIsError, refetch: refetchRecent } = useSessions({ limit: 10 })
+
+  const hasError = meIsError || coursesIsError || activeIsError || recentIsError
+  const refetchAll = () => {
+    refetchMe()
+    refetchCourses()
+    refetchActive()
+    refetchRecent()
+  }
+
+  // "No data yet" (not "is fetching") is the skeleton condition: it also
+  // covers the paused states — token mid-refresh, persisted cache still
+  // restoring — where isLoading is false but rendering would show fallbacks.
+  const statsPending   = (!coursesData && !coursesIsError) || (!activeData && !activeIsError)
+  const recentPending  = !recentData && !recentIsError
+  const coursesPending = !coursesData && !coursesIsError
 
   const courses = coursesData?.data?.data || []
   const active  = activeData?.data?.data || []
   const recent  = recentData?.data?.data || []
 
+  // Don't flash the real dashboard while we still don't know who this is (or
+  // do know and are about to redirect to onboarding). Skeletons mirror the
+  // real layout so there's no jump when content arrives.
+  if (hasError) {
+    return (
+      <div className="space-y-8 py-10">
+        <QueryErrorState message="Failed to load dashboard data. Please check your network connection." onRetry={refetchAll} />
+      </div>
+    )
+  }
+
+  if (!me || needsOnboarding) {
+    return (
+      <div className="space-y-8">
+        <PageHeaderSkeleton />
+        <StatCardsSkeleton count={3} />
+        <SessionListSkeleton rows={5} />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-8">
 
       {/* ── Page header ─────────────────────────────────────────── */}
-      <div className="flex items-start justify-between gap-4">
-        {meLoading ? <PageHeaderSkeleton /> : (
-          <div>
-            <h1 className="ttl text-2xl font-bold tracking-tight"><span className="text-[#9c9c9c]/70"> Welcome back! {" "}</span> {name}</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              {profile?.department
-                ? <><span className="font-medium">{profile.department}</span>{' '}<span className="italic">· Caleb University</span></>
-                : <span className="italic">Lecturer · Caleb University</span>
-              }
-            </p>
-          </div>
-        )}
-        <Button asChild size="sm" className="shrink-0">
-          <Link href="/dashboard/lecturer/sessions">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">Welcome back,</p>
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">{name}</h1>
+          <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-1">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse shrink-0" />
+            {profile?.department ? (
+              <>
+                <span className="font-medium text-foreground">{profile.department}</span>
+                <span className="text-muted-foreground/50">·</span>
+                <span className="italic">Caleb University</span>
+              </>
+            ) : (
+              <span className="italic">Lecturer · Caleb University</span>
+            )}
+          </p>
+        </div>
+        <Button asChild size="sm" className="shrink-0 w-full sm:w-auto">
+          <Link href="/dashboard/lecturer/sessions" className="flex items-center justify-center gap-1.5">
             <Plus className="h-4 w-4" /> New Session
           </Link>
         </Button>
       </div>
 
-      {/* ── KPI strip — always full width ───────────────────────── */}
-      {coursesLoading || activeLoading
-        ? <StatCardsSkeleton count={4} />
-        : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            <StatCard label="Courses"         value={coursesData?.data?.pagination.total ?? '—'} sub="teaching" />
-            <StatCard label="Active"          value={active.length} sub="right now" />
-            <StatCard label="Total Sessions"  value={recentData?.data?.pagination.total ?? '—'} sub="all time" />
-            <StatCard label="Courses"
-              value={coursesData?.data?.pagination.total ?? '—'}
-              sub="total courses"
-            />
-          </div>
-        )
-      }
+      {/* Sessions need the lecturer's GPS anchor — sort the permission now */}
+      <LocationPermissionBanner />
+
+      {/* KPI strip: always full width */}
+      {statsPending ? (
+        <StatCardsSkeleton count={3} />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatCard label="Courses"         value={coursesData?.data?.pagination.total ?? 'N/A'} sub="teaching" />
+          <StatCard label="Active"          value={active.length} sub="right now" />
+          <StatCard label="Total Sessions"  value={recentData?.data?.pagination.total ?? 'N/A'} sub="all time" />
+        </div>
+      )}
 
       {/* ── Live sessions banner (only when active) ─────────────── */}
       {active.length > 0 && (
@@ -107,7 +158,7 @@ export default function LecturerDashboard() {
       {/* ── Main 2-column grid ──────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6">
 
-        {/* Left — Recent sessions (primary) */}
+        {/* Left: Recent sessions (primary) */}
         <section>
           <div className="flex items-center justify-between mb-4">
             <SectionLabel>Recent sessions</SectionLabel>
@@ -115,7 +166,9 @@ export default function LecturerDashboard() {
               <Link href="/dashboard/lecturer/sessions">See all</Link>
             </Button>
           </div>
-          {recentLoading ? <SessionListSkeleton rows={5} /> : !recent.length ? (
+          {recentPending ? (
+            <SessionListSkeleton rows={5} />
+          ) : !recent.length ? (
             <div className="rounded-xl border border-border bg-card px-6 py-10 text-center space-y-3">
               <p className="text-sm font-medium">No sessions yet</p>
               <p className="text-sm italic text-muted-foreground">Start your first attendance session.</p>
@@ -150,7 +203,7 @@ export default function LecturerDashboard() {
           )}
         </section>
 
-        {/* Right — My courses (summary panel) */}
+        {/* Right: My courses (summary panel) */}
         <section>
           <div className="flex items-center justify-between mb-4">
             <SectionLabel>My courses</SectionLabel>
@@ -158,7 +211,9 @@ export default function LecturerDashboard() {
               <Link href="/dashboard/lecturer/courses">Manage</Link>
             </Button>
           </div>
-          {coursesLoading ? <CourseListSkeleton rows={4} /> : !courses.length ? (
+          {coursesPending ? (
+            <CourseListSkeleton rows={4} />
+          ) : !courses.length ? (
             <div className="rounded-xl border border-border bg-card px-5 py-8 text-center space-y-3">
               <p className="text-sm italic text-muted-foreground">No courses yet.</p>
               <Button asChild size="sm" variant="outline">

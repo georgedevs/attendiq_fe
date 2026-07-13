@@ -1,22 +1,23 @@
 'use client'
 
 /**
- * /display/t/[token] — Token-based classroom display.
+ * /display/t/[token]: Token-based classroom display.
  *
  * This page is reached via the "Project" button on the lecturer's session page.
  * The URL contains an opaque UUID (never the human-readable display code).
- * The page itself shows ZERO identifying information — no code, no session ID,
+ * The page itself shows ZERO identifying information: no code, no session ID,
  * no URL visible context. Just the QR code + course name.
  *
  * Why:
  *   - Students who screenshot the projection cannot share the code
  *   - Even if someone copies the URL, the token is a one-time UUID that expires
- *     with the session — it can't be brute-forced (UUID is 122 bits of entropy)
+ *     with the session. It can't be brute-forced (UUID is 122 bits of entropy)
  */
 
 import { use, useEffect, useState, useCallback } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { ThemeToggle } from '@/components/theme-toggle'
+import { Logo } from '@/components/logo'
 import { Progress } from '@/components/ui/progress'
 import type { ApiSuccess } from '@/lib/types'
 
@@ -43,7 +44,7 @@ async function fetchByToken(token: string): Promise<DisplayQRData> {
 }
 
 function TokenDisplayPage({ token }: { token: string }) {
-  // Use current origin so the QR always encodes the URL this device is on —
+  // Use current origin so the QR always encodes the URL this device is on,
   // whether that's localhost, a forwarded port, ngrok, or production.
   const appUrl = typeof window !== 'undefined' ? window.location.origin : ''
 
@@ -81,6 +82,7 @@ function TokenDisplayPage({ token }: { token: string }) {
   if (ended) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 p-8 text-center">
+        <Logo height={24} />
         <div className="space-y-2">
           <h2 className="text-2xl font-bold tracking-tight">Session Ended</h2>
           <p className="text-sm italic text-muted-foreground">
@@ -106,6 +108,7 @@ function TokenDisplayPage({ token }: { token: string }) {
   if (qr.status === 'paused') {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 p-8 text-center">
+        <Logo height={24} />
         {(qr.courseCode || qr.courseTitle) && (
           <div>
             {qr.courseCode && <p className="text-3xl font-bold tracking-tight">{qr.courseCode}</p>}
@@ -123,12 +126,10 @@ function TokenDisplayPage({ token }: { token: string }) {
   return (
     <div className="min-h-screen bg-background flex flex-col">
 
-      {/* Top bar — no code, no token, just branding + theme toggle */}
+      {/* Top bar: no code, no token, just branding + theme toggle */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-border">
         <div className="flex items-center gap-3">
-          <span className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-            AttendIQ
-          </span>
+          <Logo height={24} />
           {qr.courseCode && (
             <>
               <span className="text-border">·</span>
@@ -141,11 +142,11 @@ function TokenDisplayPage({ token }: { token: string }) {
             </>
           )}
         </div>
-        {/* Theme toggle only — no code, no identifying info */}
+        {/* Theme toggle only: no code, no identifying info */}
         <ThemeToggle />
       </div>
 
-      {/* Main — centred QR, maximally prominent */}
+      {/* Main: centred QR, maximally prominent */}
       <div className="flex-1 flex flex-col items-center justify-center gap-8 px-8">
 
         {/* Course name */}
@@ -160,7 +161,7 @@ function TokenDisplayPage({ token }: { token: string }) {
           </div>
         )}
 
-        {/* QR — white background always so it's scannable in dark mode */}
+        {/* QR: white background always so it's scannable in dark mode */}
         <div className="rounded-2xl border-4 border-border bg-white p-6">
           <QRCodeSVG
             value={qrUrl}
@@ -170,10 +171,10 @@ function TokenDisplayPage({ token }: { token: string }) {
           />
         </div>
 
-        {/* Instruction — no code mentioned */}
+        {/* Instruction: no code mentioned */}
         <p className="text-base text-muted-foreground text-center max-w-sm leading-relaxed">
           Open your phone browser and scan to mark attendance.
-          <span className="italic"> Do not screenshot — the code changes every {qr.stepSeconds} seconds.</span>
+          <span className="italic"> Do not screenshot. The code changes every {qr.stepSeconds} seconds.</span>
         </p>
 
         {/* Countdown */}

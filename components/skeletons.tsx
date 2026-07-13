@@ -1,8 +1,8 @@
 /**
  * Content-aware skeletons.
  *
- * Each skeleton mirrors the exact layout of the real component it replaces
- * — same heights, same column widths, same spacing. This prevents layout
+ * Each skeleton mirrors the exact layout of the real component it replaces:
+ * same heights, same column widths, same spacing. This prevents layout
  * shift and makes the shimmer feel like real content loading, not a placeholder.
  *
  * All use the shared shimmer animation from globals.css so they wave in sync.
@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 /* ── Stat cards (responsive full-width KPI strip) ───────────── */
 export function StatCardsSkeleton({ count = 4 }: { count?: number }) {
-  const cols = count <= 2 ? 'grid-cols-2' : count === 3 ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-2 md:grid-cols-4'
+  const cols = count <= 2 ? 'grid-cols-1 sm:grid-cols-2' : count === 3 ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4'
   return (
     <div className={`grid gap-4 ${cols}`}>
       {Array.from({ length: count }).map((_, i) => (

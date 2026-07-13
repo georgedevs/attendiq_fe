@@ -4,7 +4,7 @@ import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Providers } from './providers'
 
-// Variable font — loads weights 100-900 in a single request, no FOUT
+// Variable font, loads weights 100-900 in a single request, no FOUT
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
@@ -13,7 +13,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: 'AttendIQ — Smart Attendance',
+    default: 'AttendIQ: Smart Attendance',
     template: '%s | AttendIQ',
   },
   description: 'Smart QR-based attendance verification for Caleb University',

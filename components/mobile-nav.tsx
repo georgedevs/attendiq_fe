@@ -26,7 +26,14 @@ export function MobileNav() {
 
   useEffect(() => { setRole(getStoredRole()) }, [])
 
-  const items = role === 'lecturer' ? lecturerItems : studentItems
+  const defaultRole = pathname?.startsWith('/dashboard/lecturer')
+    ? 'lecturer'
+    : pathname?.startsWith('/dashboard/student')
+      ? 'student'
+      : null
+
+  const resolvedRole = role || defaultRole
+  const items = resolvedRole === 'lecturer' ? lecturerItems : studentItems
 
   return (
     <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-card border-t border-border">

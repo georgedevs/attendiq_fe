@@ -2,12 +2,17 @@
 
 import { useEffect, useState, useRef, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { CheckCircle, XCircle, Loader2, MapPin, Fingerprint, AlertTriangle, Navigation } from 'lucide-react'
 import { AttendPageSkeleton } from '@/components/skeletons'
 import { api } from '@/lib/api-client'
-import { isAuthenticated } from '@/lib/auth'
+import { isAuthenticated, saveAuthTokens, setPostLoginRedirect, isDevBypassEnabled } from '@/lib/auth'
 import { collectFingerprint } from '@/lib/fingerprint'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Logo } from '@/components/logo'
 import { AttendanceBadge, LocationBadge } from '@/components/attendance-badge'
 import type { ApiSuccess, AttendanceRecord } from '@/lib/types'
 
@@ -25,33 +30,43 @@ interface GPSCoords { latitude: number; longitude: number; accuracy: number }
 
 function AccuracyLabel({ accuracy }: { accuracy: number | null }) {
   if (accuracy === null) return <span className="italic text-muted-foreground">searching…</span>
-  if (accuracy <= 20)   return <span className="text-green-600 dark:text-green-400 font-medium">{Math.round(accuracy)} m — excellent</span>
-  if (accuracy <= 50)   return <span className="text-green-600 dark:text-green-400">{Math.round(accuracy)} m — good</span>
-  if (accuracy <= 150)  return <span className="text-yellow-600 dark:text-yellow-400">{Math.round(accuracy)} m — fair</span>
-  return <span className="text-muted-foreground">{Math.round(accuracy)} m — weak signal</span>
+  if (accuracy <= 20)   return <span className="text-green-600 dark:text-green-400 font-medium">{Math.round(accuracy)} m, excellent</span>
+  if (accuracy <= 50)   return <span className="text-green-600 dark:text-green-400">{Math.round(accuracy)} m, good</span>
+  if (accuracy <= 150)  return <span className="text-yellow-600 dark:text-yellow-400">{Math.round(accuracy)} m, fair</span>
+  return <span className="text-muted-foreground">{Math.round(accuracy)} m, weak signal</span>
 }
 
 function AttendPage() {
   const params  = useSearchParams()
   const router  = useRouter()
+  const queryClient = useQueryClient()
   const t = params.get('t')
   const s = params.get('s')
+  const displayToken = params.get('displayToken') || params.get('token')
 
   const [step, setStep]               = useState<Step>('capture')
   const [captureToken, setCaptureToken] = useState<string | null>(null)
   const [record, setRecord]           = useState<AttendanceRecord | null>(null)
   const [errorMsg, setErrorMsg]       = useState('')
 
-  // GPS state — updated live as watchPosition fires
+  // GPS state, updated live as watchPosition fires
   const [gps, setGps]             = useState<GPSCoords | null>(null)
   const [gpsError, setGpsError]   = useState(false)
   const [gpsSeconds, setGpsSeconds] = useState(0)
   const watchIdRef                = useRef<number | null>(null)
   const timerRef                  = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  // Dev bypass: email-only login, never shown in production
+  const [devEmail, setDevEmail]     = useState('')
+  const [devLoading, setDevLoading] = useState(false)
+
   /* ── Step 1: validate QR / resume stored token ─────────────────────────── */
   useEffect(() => {
-    if (!t || !s) { setStep('error'); setErrorMsg('Invalid QR code.'); return }
+    if (!s || (!t && !displayToken)) {
+      setStep('error')
+      setErrorMsg('Invalid attendance link or QR code.')
+      return
+    }
 
     const pending = typeof window !== 'undefined' ? sessionStorage.getItem(PENDING_TOKEN) : null
     const pSess   = typeof window !== 'undefined' ? sessionStorage.getItem(PENDING_SESSION) : null
@@ -64,7 +79,12 @@ function AttendPage() {
       return
     }
 
-    api.get<ApiSuccess<{ captureToken: string }>>(`/attend/capture?t=${encodeURIComponent(t)}&s=${encodeURIComponent(s)}`)
+    const queryParams = new URLSearchParams()
+    queryParams.append('s', s)
+    if (t) queryParams.append('t', t)
+    if (displayToken) queryParams.append('displayToken', displayToken)
+
+    api.get<ApiSuccess<{ captureToken: string }>>(`/attend/capture?${queryParams.toString()}`)
       .then((res) => {
         const token = (res as ApiSuccess<{ captureToken: string }>).data.captureToken
         setCaptureToken(token)
@@ -72,12 +92,12 @@ function AttendPage() {
       })
       .catch((err) => {
         setStep('error')
-        setErrorMsg(err?.message || 'QR code has expired. Ask your lecturer for the current code.')
+        setErrorMsg(err?.message || 'Attendance link or QR code has expired. Ask your lecturer for a new one.')
       })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /* ── Step 2: watch GPS — keeps updating until we submit or skip ─────────── */
+  /* Step 2: watch GPS, keeps updating until we submit or skip */
   useEffect(() => {
     if (step !== 'gps-waiting') return
 
@@ -147,12 +167,39 @@ function AttendPage() {
     }
   }
 
-  const handleLogin = () => {
+  const rememberPendingCapture = () => {
     if (captureToken && s) {
       sessionStorage.setItem(PENDING_TOKEN, captureToken)
       sessionStorage.setItem(PENDING_SESSION, s)
     }
-    router.push(`/login?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`)
+  }
+
+  const handleMicrosoftLogin = () => {
+    rememberPendingCapture()
+    setPostLoginRedirect(window.location.pathname + window.location.search)
+    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api'
+    window.location.href = `${base}/auth/microsoft`
+  }
+
+  const handleDevLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!devEmail.trim()) return
+    setDevLoading(true)
+    try {
+      const res = await api.post<ApiSuccess<{ accessToken: string; refreshToken: string }>>(
+        '/v2/auth/login',
+        { email: devEmail },
+      )
+      const { accessToken, refreshToken } = (res as ApiSuccess<{ accessToken: string; refreshToken: string }>).data
+      saveAuthTokens(accessToken, refreshToken)
+      // Fresh session may be a different account; drop the previous cache.
+      queryClient.clear()
+      setStep('gps-waiting')
+    } catch (err: unknown) {
+      toast.error((err as { message?: string })?.message || 'Login failed')
+    } finally {
+      setDevLoading(false)
+    }
   }
 
   return (
@@ -160,8 +207,8 @@ function AttendPage() {
       <div className="w-full max-w-sm">
 
         {/* Brand */}
-        <div className="text-center mb-10">
-          <p className="text-xs uppercase tracking-widest text-muted-foreground">AttendIQ</p>
+        <div className="flex flex-col items-center mb-10 gap-1.5">
+          <Logo height={28} />
           <p className="text-sm text-muted-foreground">Caleb University</p>
         </div>
 
@@ -175,18 +222,63 @@ function AttendPage() {
 
         {/* Login prompt */}
         {step === 'login-prompt' && (
-          <div className="rounded-xl border border-border bg-card p-7 space-y-5 text-center">
-            <div>
+          <div className="rounded-xl border border-border bg-card p-7 space-y-5">
+            <div className="text-center">
               <p className="font-semibold">Sign in to continue</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Your scan has been recorded. Sign in to submit your attendance — you have 15 minutes.
+                Your scan has been recorded. Sign in to submit your attendance, you have 15 minutes.
               </p>
             </div>
-            <Button className="w-full" onClick={handleLogin}>Sign in</Button>
+
+            <Button
+              variant="outline"
+              className="w-full h-11 gap-2.5 font-medium"
+              onClick={handleMicrosoftLogin}
+            >
+              <svg width="16" height="16" viewBox="0 0 21 21" aria-hidden>
+                <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+                <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+                <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+                <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+              </svg>
+              Continue with Microsoft
+            </Button>
+
+            {isDevBypassEnabled() && (
+              <>
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-border" />
+                  </div>
+                  <div className="relative flex justify-center">
+                    <span className="bg-card px-3 text-xs text-muted-foreground">or dev bypass</span>
+                  </div>
+                </div>
+
+                <form onSubmit={handleDevLogin} className="space-y-3 text-left">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="dev-email" className="text-sm">Email address</Label>
+                    <Input
+                      id="dev-email"
+                      type="email"
+                      placeholder="your@calebuniversity.edu.ng"
+                      value={devEmail}
+                      onChange={(e) => setDevEmail(e.target.value)}
+                      required
+                      autoComplete="email"
+                      className="h-11"
+                    />
+                  </div>
+                  <Button type="submit" className="w-full h-11" disabled={devLoading}>
+                    {devLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign in'}
+                  </Button>
+                </form>
+              </>
+            )}
           </div>
         )}
 
-        {/* GPS waiting — live accuracy feed */}
+        {/* GPS waiting: live accuracy feed */}
         {step === 'gps-waiting' && (
           <div className="rounded-xl border border-border bg-card p-7 space-y-5">
             {gpsError ? (
@@ -209,7 +301,7 @@ function AttendPage() {
                 </div>
 
                 <Button className="w-full" onClick={() => window.location.reload()}>
-                  I've enabled location — try again
+                  I've enabled location, try again
                 </Button>
               </div>
             ) : (
@@ -251,7 +343,7 @@ function AttendPage() {
 
                 {gpsSeconds >= GPS_HINT_AFTER && !gps && (
                   <p className="text-xs italic text-muted-foreground text-center">
-                    GPS is taking a while — try moving near a window or stepping outside briefly.
+                    GPS is taking a while. Try moving near a window or stepping outside briefly.
                   </p>
                 )}
               </div>
@@ -284,7 +376,7 @@ function AttendPage() {
               )}
               <div>
                 <p className="font-semibold">
-                  {record.status === 'present' ? 'Attendance recorded' : 'Marked — under review'}
+                  {record.status === 'present' ? 'Attendance recorded' : 'Marked, under review'}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   {record.status === 'present' ? 'You have been marked present for this session.' : 'Your lecturer will review your attendance.'}

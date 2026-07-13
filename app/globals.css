@@ -5,11 +5,11 @@
 
 /*
  * ═══════════════════════════════════════════════════════════════
- *  AttendIQ — Theme System
+ *  AttendIQ: Theme System
  * ═══════════════════════════════════════════════════════════════
  *
  *  All colours are CSS custom properties so switching themes
- *  later only requires changing values here — no component changes.
+ *  later only requires changing values here, no component changes.
  *
  *  CURRENT THEME: Caleb University green/teal
  *
@@ -74,7 +74,7 @@
   --chart-4: oklch(0.65 0.16 200);
   --chart-5: oklch(0.7 0.12 120);
 
-  /* Border radius — one token controls all radii */
+  /* Border radius: one token controls all radii */
   --radius: 0.75rem;
 
   /* Sidebar (slightly different from card for visual depth) */
@@ -208,7 +208,7 @@
  * Replaces Tailwind's pulse with a proper left-to-right wave shimmer.
  * All skeletons share the same 1.6s cycle so they animate in sync.
  * The gradient is aligned to viewport width so every skeleton shimmers
- * together — this is what separates premium loading states from generic.
+ * together, this is what separates premium loading states from generic.
  */
 @keyframes shimmer {
   0% {

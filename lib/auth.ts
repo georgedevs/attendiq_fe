@@ -4,6 +4,29 @@ const KEYS = {
   ROLE: 'attendiq_role',
 } as const
 
+const POST_LOGIN_REDIRECT_KEY = 'attendiq_post_login_redirect'
+
+// Carries the "come back here" path across the Microsoft OAuth round trip
+// (the callback always lands the browser on a fixed /auth/callback URL,
+// so we can't pass this through the OAuth flow itself. sessionStorage
+// survives the redirect to Microsoft and back within the same tab).
+export function setPostLoginRedirect(path: string) {
+  if (typeof window !== 'undefined') sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, path)
+}
+
+export function consumePostLoginRedirect(): string | null {
+  if (typeof window === 'undefined') return null
+  const path = sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY)
+  if (path) sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY)
+  return path
+}
+
+// The email-only dev login bypasses Microsoft SSO entirely. Never expose it
+// in production.
+export function isDevBypassEnabled(): boolean {
+  return process.env.NODE_ENV !== 'production'
+}
+
 function store<T extends string>(key: T, value: string) {
   if (typeof window !== 'undefined') localStorage.setItem(key, value)
 }
@@ -15,17 +38,50 @@ function clear<T extends string>(key: T) {
   if (typeof window !== 'undefined') localStorage.removeItem(key)
 }
 
+// ── JWT payload handling ─────────────────────────────────────────────────────
+// The access token is the single client-side source of truth for identity and
+// role. Decoding here is NOT verification (only the backend can verify the
+// signature); it exists so routing/UI decisions come from the same signed
+// object the backend will check, instead of a separate editable key. Any
+// tampered value still dies at the API, and ProtectedRoute additionally
+// reconciles against the server's /users/me response.
+
+interface TokenPayload {
+  sub: string
+  role?: string
+  exp?: number
+  [claim: string]: unknown
+}
+
+function decodeJwtPayload(token: string): TokenPayload | null {
+  try {
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    return JSON.parse(atob(base64)) as TokenPayload
+  } catch {
+    return null
+  }
+}
+
+const CLOCK_SKEW_MS = 30_000
+
+/** Decoded payload of the stored access token, or null if absent/malformed/expired. */
+export function getTokenPayload(): TokenPayload | null {
+  const token = getAccessToken()
+  if (!token) return null
+  const payload = decodeJwtPayload(token)
+  if (!payload) return null
+  if (payload.exp && payload.exp * 1000 < Date.now() - CLOCK_SKEW_MS) return null
+  return payload
+}
+
 export function saveAuthTokens(accessToken: string, refreshToken: string, role?: string) {
   store(KEYS.ACCESS, accessToken)
   store(KEYS.REFRESH, refreshToken)
-  if (role) store(KEYS.ROLE, role)
-  else {
-    // Parse role from JWT payload without verification
-    try {
-      const payload = JSON.parse(atob(accessToken.split('.')[1]))
-      if (payload.role) store(KEYS.ROLE, payload.role)
-    } catch {}
-  }
+  // Cached copy of the role for moments when the access token is expired but
+  // the session is still refreshable. getStoredRole() always prefers the live
+  // JWT payload over this cache.
+  const resolvedRole = role ?? decodeJwtPayload(accessToken)?.role
+  if (resolvedRole) store(KEYS.ROLE, resolvedRole)
 }
 
 export function getAccessToken(): string | null {
@@ -37,7 +93,7 @@ export function getRefreshToken(): string | null {
 }
 
 export function getStoredRole(): string | null {
-  return load(KEYS.ROLE)
+  return getTokenPayload()?.role ?? load(KEYS.ROLE)
 }
 
 export function removeAuthTokens() {
@@ -46,8 +102,15 @@ export function removeAuthTokens() {
   clear(KEYS.ROLE)
 }
 
+/**
+ * True when the session is usable: either the access token is present, well
+ * formed and unexpired, or a refresh token exists (the axios interceptor
+ * transparently refreshes on the first 401). A malformed or expired access
+ * token with no refresh token is NOT authenticated, previously any leftover
+ * string in localStorage counted.
+ */
 export function isAuthenticated(): boolean {
-  return !!getAccessToken()
+  return getTokenPayload() !== null || !!getRefreshToken()
 }
 
 export async function tryRefreshToken(): Promise<boolean> {
@@ -62,9 +125,17 @@ export async function tryRefreshToken(): Promise<boolean> {
     if (!accessToken || !newRefresh) return false
     saveAuthTokens(accessToken, newRefresh)
     return true
-  } catch {
-    removeAuthTokens()
-    return false
+  } catch (err: unknown) {
+    // Only destroy the session when the SERVER rejected the token. A network
+    // blip (offline phone, flaky campus wifi) must not log the user out —
+    // keep the tokens and report the session as still alive; the axios
+    // interceptor will retry the refresh on the next 401.
+    const status = (err as { response?: { status?: number } })?.response?.status
+    if (status && status >= 400 && status < 500) {
+      removeAuthTokens()
+      return false
+    }
+    return true
   }
 }
 

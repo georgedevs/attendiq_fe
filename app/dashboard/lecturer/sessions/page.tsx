@@ -4,9 +4,9 @@ import { useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
-import { Plus, Loader2, MapPin, ChevronRight, Download } from 'lucide-react'
+import { Plus, Loader2, MapPin, ChevronRight, ChevronLeft } from 'lucide-react'
 import { useSessions, useStartSession } from '@/hooks/use-sessions'
-import { useCourses } from '@/hooks/use-courses'
+import { useCourses, useCourse } from '@/hooks/use-courses'
 import { useMe } from '@/hooks/use-me'
 import { useAppConfig } from '@/hooks/use-app-config'
 import { Button } from '@/components/ui/button'
@@ -17,10 +17,9 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { formatDateTime, toTitleCase } from '@/lib/utils'
-import { api } from '@/lib/api-client'
-import type { Session, ApiSuccess } from '@/lib/types'
-import type { AttendanceRow } from '@/hooks/use-session-attendance'
+import { formatDateTime } from '@/lib/utils'
+import type { Session } from '@/lib/types'
+import { QueryErrorState } from '@/components/query-error-state'
 
 function StatusDot({ status }: { status: string }) {
   const c = status === 'active' ? 'bg-green-500' : status === 'paused' ? 'bg-yellow-500' : 'bg-border'
@@ -31,16 +30,14 @@ function StartDialog() {
   const [open, setOpen]         = useState(false)
   const [courseId, setCourseId] = useState('')
   const [loading, setLoading]   = useState(false)
-  const { data: meData }        = useMe()
-  const lecturerId              = (meData?.data?.profile as { id?: string } | null)?.id
-  const { data: coursesData }   = useCourses({ limit: 100, lecturerId })
+  const { data: coursesData }   = useCourses({ limit: 100 })
   const courses                 = coursesData?.data?.data || []
   const { config }              = useAppConfig()
   const start                   = useStartSession()
 
   const handle = async () => {
     if (!courseId) { toast.error('Select a course'); return }
-    if (!navigator.geolocation) { toast.error('Your browser does not support location — use a phone browser'); return }
+    if (!navigator.geolocation) { toast.error('Your browser does not support location, use a phone browser'); return }
 
     // Check permission state before requesting to show the right error
     if (navigator.permissions) {
@@ -92,11 +89,11 @@ function StartDialog() {
             <Label>Course</Label>
             <Select value={courseId} onValueChange={setCourseId}>
               <SelectTrigger>
-                <SelectValue placeholder={courses.length ? 'Select a course' : 'No courses — create one first'} />
+                <SelectValue placeholder={courses.length ? 'Select a course' : 'No courses, create one first'} />
               </SelectTrigger>
               <SelectContent>
                 {courses.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.code} — {c.title}</SelectItem>
+                  <SelectItem key={c.id} value={c.id}>{c.code}: {c.title}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -145,8 +142,13 @@ function SessionsPageInner() {
   const searchParams = useSearchParams()
   const courseIdFilter = searchParams.get('courseId')
 
-  const { data: activeData, isLoading: activeLoading } = useSessions({ status: 'active', limit: 20 })
-  const { data: allData,    isLoading: allLoading    } = useSessions({ limit: 100 })
+  const { data: activeData, isError: activeIsError, refetch: refetchActive } = useSessions({ status: 'active', limit: 20 })
+  const { data: allData, isError: allIsError, refetch: refetchAllSessions } = useSessions({ limit: 100 })
+
+  // Skeleton whenever there's no data to show yet ("pending"), not just while
+  // a fetch is in flight — covers paused/restoring states without fallbacks.
+  const activePending = !activeData && !activeIsError
+  const allPending    = !allData && !allIsError
 
   const active = (activeData?.data?.data || []).filter(s =>
     courseIdFilter ? s.courseId === courseIdFilter : true
@@ -156,85 +158,53 @@ function SessionsPageInner() {
   )
   const total = courseIdFilter ? all.length : allData?.data?.pagination.total
 
-  // Find course name for the filter header
-  const filteredCourse = courseIdFilter
-    ? all.find(s => s.course)?.course as { code: string; title: string } | undefined
-    : undefined
+  // Fetch the course directly rather than deriving it from session data,
+  // otherwise a course with zero sessions shows no course context at all,
+  // making the filtered view look like an empty generic "Sessions" page.
+  const { data: courseData, isError: courseIsError, refetch: refetchCourse } = useCourse(courseIdFilter ?? '')
+  const filteredCourse = courseData?.data
 
-  const [reportLoading, setReportLoading] = useState(false)
+  const hasError = activeIsError || allIsError || (courseIdFilter && courseIsError)
+  const refetchAll = () => {
+    refetchActive()
+    refetchAllSessions()
+    if (courseIdFilter) refetchCourse()
+  }
 
-  const downloadReport = async () => {
-    if (!courseIdFilter || !all.length) return
-    setReportLoading(true)
-    try {
-      // Fetch attendance for every session in parallel
-      const results = await Promise.all(
-        all.map(s =>
-          api.get<ApiSuccess<{ records: AttendanceRow[] }>>(`/attend/session/${s.id}`)
-            .then(r => ({ session: s, records: r.data.records }))
-            .catch(() => ({ session: s, records: [] }))
-        )
-      )
-
-      // Build student map: studentId → { name, matric, sessions: { [sessionId]: status } }
-      const studentMap = new Map<string, { name: string; matric: string | null; sessions: Record<string, string> }>()
-      for (const { session, records } of results) {
-        for (const rec of records) {
-          if (!studentMap.has(rec.studentId)) {
-            studentMap.set(rec.studentId, { name: rec.studentName, matric: rec.matricNumber, sessions: {} })
-          }
-          studentMap.get(rec.studentId)!.sessions[session.id] = rec.status
-        }
-      }
-
-      const sessions = all.slice().reverse() // chronological order
-      const dateLabels = sessions.map(s => formatDateTime(s.startedAt))
-
-      // CSV header
-      const header = ['Student Name', 'Matric Number', ...dateLabels, 'Total Present', `Total Sessions (${sessions.length})`, 'Attendance %']
-
-      // CSV rows
-      const rows = Array.from(studentMap.values())
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map(student => {
-          const statuses = sessions.map(s => {
-            const st = student.sessions[s.id]
-            if (!st) return 'Absent'
-            if (st === 'present') return 'Present'
-            if (st === 'flagged') return 'Flagged'
-            if (st === 'rejected') return 'Rejected'
-            return st
-          })
-          const present = statuses.filter(s => s === 'Present' || s === 'Flagged').length
-          const pct = sessions.length ? `${Math.round((present / sessions.length) * 100)}%` : '0%'
-          return [toTitleCase(student.name), student.matric ?? '', ...statuses, present, sessions.length, pct]
-        })
-
-      const csv = [header, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n')
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${filteredCourse?.code ?? 'course'}-attendance-report.csv`
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch {
-      toast.error('Failed to generate report')
-    } finally {
-      setReportLoading(false)
-    }
+  if (hasError) {
+    return (
+      <div className="space-y-8 py-10">
+        <QueryErrorState
+          message="Failed to load sessions. Please check your network connection."
+          onRetry={refetchAll}
+        />
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
 
+      {/* Breadcrumb: makes it unmistakable this is a course-scoped view */}
+      {courseIdFilter && (
+        <Link
+          href="/dashboard/lecturer/courses"
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+          Courses{filteredCourse ? <> / <span className="font-medium text-foreground">{filteredCourse.code}</span></> : null}
+        </Link>
+      )}
+
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Sessions</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {filteredCourse ? filteredCourse.code : 'Sessions'}
+          </h1>
           <p className="text-sm text-muted-foreground mt-1">
             {filteredCourse
-              ? <><span className="font-medium">{filteredCourse.code}</span>{' '}<span className="italic">· {total} session{total !== 1 ? 's' : ''}</span></>
+              ? <><span className="italic">{filteredCourse.title}</span>{' '}<span className="italic">· {total} session{total !== 1 ? 's' : ''}</span></>
               : total !== undefined
                 ? <><span className="font-medium">{total}</span>{' '}<span className="italic">session{total !== 1 ? 's' : ''} total</span></>
                 : <span className="italic">Your attendance sessions</span>
@@ -243,22 +213,9 @@ function SessionsPageInner() {
         </div>
         <div className="flex items-center gap-2">
           {courseIdFilter && (
-            <>
-              <Button variant="ghost" size="sm" asChild className="text-xs text-muted-foreground">
-                <Link href="/dashboard/lecturer/sessions">All courses</Link>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={downloadReport}
-                disabled={reportLoading || allLoading || !all.length}
-              >
-                {reportLoading
-                  ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
-                  : <Download className="h-4 w-4 mr-1.5" />}
-                Download Report
-              </Button>
-            </>
+            <Button variant="ghost" size="sm" asChild className="text-xs text-muted-foreground">
+              <Link href="/dashboard/lecturer/sessions">All courses</Link>
+            </Button>
           )}
           <StartDialog />
         </div>
@@ -273,7 +230,7 @@ function SessionsPageInner() {
         </TabsList>
 
         <TabsContent value="active" className="mt-5">
-          {activeLoading ? <SessionListSkeleton rows={3} /> : !active.length ? (
+          {activePending ? <SessionListSkeleton rows={3} /> : !active.length ? (
             <div className="rounded-xl border border-border bg-card px-6 py-12 text-center space-y-3">
               <p className="text-sm font-medium">No active sessions</p>
               <p className="text-sm italic text-muted-foreground">Start a session to begin taking attendance.</p>
@@ -287,7 +244,7 @@ function SessionsPageInner() {
         </TabsContent>
 
         <TabsContent value="all" className="mt-5">
-          {allLoading ? <SessionListSkeleton rows={6} /> : !all.length ? (
+          {allPending ? <SessionListSkeleton rows={6} /> : !all.length ? (
             <div className="rounded-xl border border-border bg-card px-6 py-12 text-center space-y-3">
               <p className="text-sm italic text-muted-foreground">
                 {courseIdFilter ? 'No sessions for this course yet.' : 'No sessions yet.'}

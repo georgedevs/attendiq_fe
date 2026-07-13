@@ -149,7 +149,7 @@ function DisplayQRPage({ code }: { code: string }) {
         <ThemeToggle />
       </div>
 
-      {/* Main content — centred QR */}
+      {/* Main content: centred QR */}
       <div className="flex-1 flex flex-col items-center justify-center gap-8 px-8">
 
         {/* Course context */}
@@ -175,7 +175,7 @@ function DisplayQRPage({ code }: { code: string }) {
         {/* Instruction */}
         <p className="text-base text-muted-foreground text-center max-w-sm">
           Open your phone browser and scan to mark attendance.
-          <span className="italic"> Do not screenshot — the code changes every {qr.stepSeconds} seconds.</span>
+          <span className="italic"> Do not screenshot. The code changes every {qr.stepSeconds} seconds.</span>
         </p>
 
         {/* Countdown */}
