@@ -6,6 +6,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { Progress } from '@/components/ui/progress'
 import type { ApiSuccess } from '@/lib/types'
+import { encodeQrLink } from '@/lib/url-compress'
 
 interface DisplayQRData {
   token: string
@@ -68,7 +69,7 @@ function DisplayQRPage({ code }: { code: string }) {
 
   const progress    = totalMs > 0 ? (timeLeft / totalMs) * 100 : 0
   const secondsLeft = Math.ceil(timeLeft / 1000)
-  const qrUrl       = qr ? `${appUrl}/attend?t=${qr.token}&s=${qr.sessionId}` : ''
+  const qrUrl       = qr ? `${appUrl}/attend?c=${encodeQrLink(qr.sessionId, qr.token)}` : ''
 
   // ── Ended ───────────────────────────────────────────────────────────────────
   if (ended) {

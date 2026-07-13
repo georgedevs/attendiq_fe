@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { CheckCircle, XCircle, Loader2, MapPin, Fingerprint, AlertTriangle, Navigation } from 'lucide-react'
 import { AttendPageSkeleton } from '@/components/skeletons'
 import { api } from '@/lib/api-client'
+import { decodeLinkCode } from '@/lib/url-compress'
 import { isAuthenticated, saveAuthTokens, setPostLoginRedirect, isDevBypassEnabled } from '@/lib/auth'
 import { collectFingerprint } from '@/lib/fingerprint'
 import { Button } from '@/components/ui/button'
@@ -40,9 +41,23 @@ function AttendPage() {
   const params  = useSearchParams()
   const router  = useRouter()
   const queryClient = useQueryClient()
-  const t = params.get('t')
-  const s = params.get('s')
-  const displayToken = params.get('displayToken') || params.get('token')
+  const c = params.get('c')
+  
+  let s = params.get('s')
+  let t = params.get('t')
+  let displayToken = params.get('displayToken') || params.get('token')
+
+  if (c) {
+    const decoded = decodeLinkCode(c)
+    if (decoded) {
+      s = decoded.sessionId
+      if (decoded.type === 'direct') {
+        displayToken = decoded.token || null
+      } else if (decoded.type === 'qr') {
+        t = decoded.totp || null
+      }
+    }
+  }
 
   const [step, setStep]               = useState<Step>('capture')
   const [captureToken, setCaptureToken] = useState<string | null>(null)

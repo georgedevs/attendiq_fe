@@ -19,6 +19,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { QrDisplay } from '@/components/qr-display'
 import { AttendanceBadge } from '@/components/attendance-badge'
+import { encodeDirectLink } from '@/lib/url-compress'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { QueryErrorState } from '@/components/query-error-state'
 import { Button } from '@/components/ui/button'
@@ -478,7 +479,8 @@ export default function SessionLivePage({ params }: { params: Promise<{ id: stri
 
   const copyDirectLink = () => {
     if (!displayToken) return
-    const directLink = `${window.location.origin}/attend?s=${id}&token=${displayToken}`
+    const code = encodeDirectLink(id, displayToken)
+    const directLink = `${window.location.origin}/attend?c=${code}`
     navigator.clipboard.writeText(directLink)
     toast.success('Direct attendance link copied to clipboard!')
   }

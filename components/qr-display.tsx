@@ -5,6 +5,7 @@ import { QRCodeSVG } from 'qrcode.react'
 import { useSessionQr } from '@/hooks/use-sessions'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
+import { encodeQrLink } from '@/lib/url-compress'
 
 interface QrDisplayProps {
   sessionId: string
@@ -38,7 +39,7 @@ export function QrDisplay({ sessionId }: QrDisplayProps) {
   // Use the current page's origin so the QR works regardless of how the
   // frontend is accessed: forwarded port, ngrok, local IP, or production domain.
   const qrUrl = qr
-    ? `${window.location.origin}/attend?t=${qr.token}&s=${qr.sessionId}`
+    ? `${window.location.origin}/attend?c=${encodeQrLink(qr.sessionId, qr.token)}`
     : ''
   const progressPct  = totalMs > 0 ? (timeLeft / totalMs) * 100 : 0
   const secondsLeft  = Math.ceil(timeLeft / 1000)
