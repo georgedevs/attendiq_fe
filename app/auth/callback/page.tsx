@@ -21,8 +21,7 @@ function CallbackHandler() {
     const error = params.get('error')
 
     if (error) {
-      toast.error(error)
-      router.replace('/login')
+      router.replace(`/login?error=${encodeURIComponent(error)}`)
       return
     }
 
@@ -56,8 +55,7 @@ function CallbackHandler() {
         // so the user never sees a dashboard flash on their way to onboarding.
         router.replace(await resolvePostLoginDestination(queryClient))
       } catch {
-        toast.error('Sign in expired or was already used. Please try again.')
-        router.replace('/login')
+        router.replace(`/login?error=${encodeURIComponent('Sign in expired or was already used. Please try again.')}`)
       }
     }
 

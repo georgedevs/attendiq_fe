@@ -31,6 +31,7 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const redirectTo = searchParams.get("redirect");
+  const errorParam = searchParams.get("error");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -99,6 +100,30 @@ function LoginForm() {
                   : "Caleb University attendance management."}
               </p>
             </div>
+
+            {/* Error Message Box */}
+            {errorParam && (
+              <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/25 text-destructive text-sm flex items-start gap-3">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-5 w-5 shrink-0 mt-0.5"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <div className="space-y-1">
+                  <p className="font-semibold leading-none">Authentication Error</p>
+                  <p className="text-xs opacity-90 leading-normal">{errorParam}</p>
+                </div>
+              </div>
+            )}
 
             {/* Microsoft */}
             <div className="space-y-4">
