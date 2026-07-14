@@ -34,9 +34,13 @@ function LoginForm() {
   const errorParam = searchParams.get("error");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   useEffect(() => {
-    if (isAuthenticated()) void navigate();
+    if (isAuthenticated()) {
+      setIsRedirecting(true);
+      void navigate();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -75,6 +79,10 @@ function LoginForm() {
     const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
     window.location.href = `${base}/auth/microsoft`;
   };
+
+  if (isRedirecting) {
+    return <LoginPageSkeleton />;
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col overflow-x-hidden">
