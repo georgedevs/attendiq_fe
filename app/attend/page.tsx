@@ -68,7 +68,6 @@ function AttendPage() {
   const [gps, setGps]             = useState<GPSCoords | null>(null)
   const [gpsError, setGpsError]   = useState(false)
   const [gpsSeconds, setGpsSeconds] = useState(0)
-  const [retryTrigger, setRetryTrigger] = useState(0)
   const watchIdRef                = useRef<number | null>(null)
   const timerRef                  = useRef<ReturnType<typeof setInterval> | null>(null)
   const submittingRef             = useRef(false)
@@ -148,7 +147,7 @@ function AttendPage() {
 
     return () => stopWatch()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, retryTrigger])
+  }, [step])
 
   function stopWatch() {
     if (watchIdRef.current !== null) {
@@ -325,14 +324,7 @@ function AttendPage() {
                   <p><span className="font-medium">iPhone:</span> Settings → Safari (or Chrome) → Location → Allow</p>
                 </div>
 
-                <Button
-                  className="w-full"
-                  onClick={() => {
-                    setGpsError(false)
-                    setGps(null)
-                    setRetryTrigger((prev) => prev + 1)
-                  }}
-                >
+                <Button className="w-full" onClick={() => window.location.reload()}>
                   I've enabled location, try again
                 </Button>
               </div>

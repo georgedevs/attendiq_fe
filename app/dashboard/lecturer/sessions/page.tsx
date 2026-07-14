@@ -147,21 +147,9 @@ function StartDialog() {
                 size="sm"
                 variant="outline"
                 className="w-fit border-destructive/30 hover:bg-destructive/20 text-destructive mt-1 h-8"
-                onClick={async () => {
-                  setGeoState('checking')
-                  await checkLocationPermission()
-                  navigator.geolocation.getCurrentPosition(
-                    () => setGeoState('granted'),
-                    (err) => {
-                      if (err.code === err.PERMISSION_DENIED) {
-                        setGeoState('denied')
-                      }
-                    },
-                    { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
-                  )
-                }}
+                onClick={() => window.location.reload()}
               >
-                Try Again
+                I've enabled location, reload page
               </Button>
             </div>
           )}
