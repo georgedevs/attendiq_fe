@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -35,17 +35,53 @@ function StartDialog() {
   const { config }              = useAppConfig()
   const start                   = useStartSession()
 
+  const [geoState, setGeoState] = useState<'prompt' | 'granted' | 'denied' | 'checking'>('checking')
+
+  const checkLocationPermission = async () => {
+    if (!navigator.geolocation) {
+      setGeoState('denied')
+      return
+    }
+    if (navigator.permissions) {
+      try {
+        const perm = await navigator.permissions.query({ name: 'geolocation' as PermissionName })
+        setGeoState(perm.state)
+        perm.onchange = () => {
+          setGeoState(perm.state)
+        }
+      } catch {
+        setGeoState('prompt')
+      }
+    } else {
+      setGeoState('prompt')
+    }
+  }
+
+  useEffect(() => {
+    if (open) {
+      checkLocationPermission()
+      // Request location immediately to trigger native browser prompt if needed
+      navigator.geolocation.getCurrentPosition(
+        () => {
+          setGeoState('granted')
+        },
+        (err) => {
+          if (err.code === err.PERMISSION_DENIED) {
+            setGeoState('denied')
+          }
+        },
+        { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
+      )
+    }
+  }, [open])
+
   const handle = async () => {
     if (!courseId) { toast.error('Select a course'); return }
     if (!navigator.geolocation) { toast.error('Your browser does not support location, use a phone browser'); return }
 
-    // Check permission state before requesting to show the right error
-    if (navigator.permissions) {
-      const perm = await navigator.permissions.query({ name: 'geolocation' })
-      if (perm.state === 'denied') {
-        toast.error('Location blocked. Enable it in your browser settings then try again.')
-        return
-      }
+    if (geoState === 'denied') {
+      toast.error('Location blocked. Enable it in your browser settings then try again.')
+      return
     }
 
     setLoading(true)
@@ -59,7 +95,7 @@ function StartDialog() {
             if (err.code === err.PERMISSION_DENIED) reject(new Error('Location permission denied. Allow location and try again.'))
             else reject(new Error('Could not get your location. Try again.'))
           },
-          { timeout: 10000, enableHighAccuracy: true }
+          { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
         )
       })
     } catch (err: unknown) {
@@ -93,11 +129,35 @@ function StartDialog() {
               </SelectTrigger>
               <SelectContent>
                 {courses.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.code}: {c.title}</SelectItem>
+                   <SelectItem key={c.id} value={c.id}>{c.code}: {c.title}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+          
+          {geoState === 'denied' && (
+            <div className="flex text-destructive items-start gap-2.5 text-[0.85rem] bg-destructive/10 p-3 rounded-lg border border-destructive/20 font-medium">
+              <MapPin size={18} className="shrink-0 mt-0.5" />
+              <p>
+                Location access is blocked. You must enable location permission in your browser settings to start the session.
+              </p>
+            </div>
+          )}
+
+          {geoState === 'granted' && (
+            <div className="flex text-emerald-600 dark:text-emerald-400 items-center gap-2.5 text-[0.85rem] bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/20 font-medium">
+              <MapPin size={18} className="shrink-0" />
+              <p>Location access is active.</p>
+            </div>
+          )}
+
+          {geoState === 'prompt' && (
+            <div className="flex text-yellow-600 dark:text-yellow-400 items-center gap-2.5 text-[0.85rem] bg-yellow-500/10 p-3 rounded-lg border border-yellow-500/20 font-medium">
+              <MapPin size={18} className="shrink-0 text-yellow-600 dark:text-yellow-400" />
+              <p>Please allow the browser location prompt to proceed.</p>
+            </div>
+          )}
+
           <div className="flex text-primary items-center gap-1.5 text-[.85rem] bg-accent/20 p-2 rounded-lg italic -text-muted-foreground">
             <MapPin size={30} className=" shrink-0" />
             <p className="">GPS will be captured. Students within{' '}
@@ -107,7 +167,7 @@ function StartDialog() {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={handle} disabled={loading || !courseId}>
+          <Button onClick={handle} disabled={loading || !courseId || geoState === 'denied'}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Start'}
           </Button>
         </DialogFooter>

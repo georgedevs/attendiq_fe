@@ -177,6 +177,12 @@ function AttendPage() {
         ...(fingerprint ? { fingerprint } : {}),
       })
       setRecord((res as ApiSuccess<AttendanceRecord>).data)
+      
+      // Invalidate cache queries so stats and history refresh immediately
+      queryClient.invalidateQueries({ queryKey: ['my-stats'] })
+      queryClient.invalidateQueries({ queryKey: ['my-attendance'] })
+      queryClient.invalidateQueries({ queryKey: ['my-attendance-by-course'] })
+
       setStep('done')
     } catch (err: unknown) {
       submittingRef.current = false

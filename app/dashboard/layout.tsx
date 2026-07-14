@@ -19,17 +19,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <ProtectedRoute requiredRole={requiredRole}>
-      <div className="flex h-screen overflow-hidden">
+      <div className="flex min-h-screen lg:h-screen lg:overflow-hidden">
         {/* Desktop sidebar */}
         <DashboardSidebar />
 
         {/* Main area */}
-        <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
+        <div className="flex flex-1 flex-col min-w-0 lg:overflow-hidden">
           {/* Mobile-only top bar */}
           <MobileHeader />
 
           {/* Scrollable content, pb-20 clears the mobile bottom nav */}
-          <main className="flex-1 overflow-y-auto bg-background">
+          <main className="flex-1 lg:overflow-y-auto bg-background">
             <div className="px-4 py-5 pb-24 lg:px-6 lg:py-6 lg:pb-6">
               {children}
             </div>
