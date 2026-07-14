@@ -136,11 +136,33 @@ function StartDialog() {
           </div>
           
           {geoState === 'denied' && (
-            <div className="flex text-destructive items-start gap-2.5 text-[0.85rem] bg-destructive/10 p-3 rounded-lg border border-destructive/20 font-medium">
-              <MapPin size={18} className="shrink-0 mt-0.5" />
-              <p>
-                Location access is blocked. You must enable location permission in your browser settings to start the session.
-              </p>
+            <div className="flex flex-col gap-2 text-destructive text-[0.85rem] bg-destructive/10 p-3 rounded-lg border border-destructive/20 font-medium">
+              <div className="flex items-start gap-2.5">
+                <MapPin size={18} className="shrink-0 mt-0.5" />
+                <p>
+                  Location access is blocked. You must enable location permission in your browser settings to start the session.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-fit border-destructive/30 hover:bg-destructive/20 text-destructive mt-1 h-8"
+                onClick={async () => {
+                  setGeoState('checking')
+                  await checkLocationPermission()
+                  navigator.geolocation.getCurrentPosition(
+                    () => setGeoState('granted'),
+                    (err) => {
+                      if (err.code === err.PERMISSION_DENIED) {
+                        setGeoState('denied')
+                      }
+                    },
+                    { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
+                  )
+                }}
+              >
+                Try Again
+              </Button>
             </div>
           )}
 
