@@ -160,6 +160,16 @@ function AttendPage() {
     }
   }
 
+  // Fallback: if we have any location lock but cannot achieve perfect accuracy (<= 50m)
+  // after 10 seconds, automatically submit with the best available position.
+  useEffect(() => {
+    if (step === 'gps-waiting' && gps && gpsSeconds >= 10) {
+      stopWatch()
+      submitAttendance(gps)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gpsSeconds, gps, step])
+
   /* ── Step 3: submit ─────────────────────────────────────────────────────── */
   async function submitAttendance(coords?: GPSCoords) {
     if (!captureToken || submittingRef.current) return
@@ -330,46 +340,14 @@ function AttendPage() {
               </div>
             ) : (
               /* ── GPS locking in ── */
-              <div className="space-y-4">
-                <div className="flex items-start gap-3">
-                  <Navigation className={`h-5 w-5 shrink-0 mt-0.5 ${gps ? 'text-primary' : 'text-muted-foreground'}`} />
-                  <div>
-                    <p className="font-semibold">Getting your location</p>
-                    <p className="text-xs italic text-muted-foreground mt-0.5">
-                      Hold still for a moment for the best accuracy.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="rounded-lg bg-muted/40 px-4 py-3 space-y-1">
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">GPS accuracy</p>
-                  <p className="text-sm">
-                    <AccuracyLabel accuracy={gps?.accuracy ?? null} />
+              <div className="space-y-5 text-center py-6">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+                <div className="space-y-1">
+                  <p className="font-semibold">Verifying your location</p>
+                  <p className="text-xs text-muted-foreground">
+                    Please hold still for a moment while we verify you are in the classroom.
                   </p>
-                  {!gps && (
-                    <div className="flex gap-1 pt-1">
-                      {[1,2,3].map(i => (
-                        <div key={i} className="h-1 flex-1 rounded-full skeleton-shimmer" />
-                      ))}
-                    </div>
-                  )}
                 </div>
-
-                {gps && (
-                  <Button
-                    className="w-full"
-                    onClick={() => { stopWatch(); submitAttendance(gps) }}
-                  >
-                    <MapPin className="h-4 w-4 mr-1.5" />
-                    Use this location ({Math.round(gps.accuracy)} m)
-                  </Button>
-                )}
-
-                {gpsSeconds >= GPS_HINT_AFTER && !gps && (
-                  <p className="text-xs italic text-muted-foreground text-center">
-                    GPS is taking a while. Try moving near a window or stepping outside briefly.
-                  </p>
-                )}
               </div>
             )}
           </div>
