@@ -138,7 +138,13 @@ function AttendPage() {
           submitAttendance(coords)
         }
       },
-      () => setGpsError(true),
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED) {
+          setGpsError(true)
+        } else {
+          console.warn('Transient geolocation error:', err.message)
+        }
+      },
       { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 },
     )
 
