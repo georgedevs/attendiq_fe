@@ -161,9 +161,9 @@ function AttendPage() {
   }
 
   // Fallback: if we have any location lock but cannot achieve perfect accuracy (<= 50m)
-  // after 10 seconds, automatically submit with the best available position.
+  // after 5 seconds, automatically submit with the best available position.
   useEffect(() => {
-    if (step === 'gps-waiting' && gps && gpsSeconds >= 10) {
+    if (step === 'gps-waiting' && gps && gpsSeconds >= 5) {
       stopWatch()
       submitAttendance(gps)
     }
