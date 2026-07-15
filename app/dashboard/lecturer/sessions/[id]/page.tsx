@@ -17,6 +17,7 @@ import {
   useUpdateAttendanceStatus,
 } from '@/hooks/use-session-attendance'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { QrDisplay } from '@/components/qr-display'
 import { AttendanceBadge } from '@/components/attendance-badge'
 import { encodeDirectLink } from '@/lib/url-compress'
@@ -154,17 +155,36 @@ function EditStatusDialog({
             {record.studentName}{record.matricNumber ? ` · ${record.matricNumber}` : ''}
           </p>
         </DialogHeader>
-        <div className="py-2">
-          <Select value={status} onValueChange={setStatus}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="present">Present</SelectItem>
-              <SelectItem value="flagged">Flagged</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
-            </SelectContent>
-          </Select>
+        <div className="py-2 space-y-4">
+          {/* Display verification flags if present */}
+          {(record.fraudScore > 0 || record.flagReason) && (
+            <div className="rounded-lg bg-destructive/5 border border-destructive/10 p-3 space-y-2 text-xs">
+              <div className="flex items-center justify-between text-destructive font-semibold">
+                <span>Verification Risk Score</span>
+                <span>{record.fraudScore}%</span>
+              </div>
+              {record.flagReason && (
+                <div className="text-muted-foreground space-y-1">
+                  <p className="font-medium text-foreground">Flag / Rejection Reasons:</p>
+                  <p className="leading-relaxed whitespace-pre-wrap">{record.flagReason}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <Label>Attendance Status</Label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="present">Present</SelectItem>
+                <SelectItem value="flagged">Flagged</SelectItem>
+                <SelectItem value="rejected">Rejected</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancel</Button>
